@@ -128,11 +128,12 @@ class Command(BaseCommand):
                         )
                     else:
                         # Dispatch through execution pipeline
-                        trade = execute_signal(signal.to_dict())
+                        trades = execute_signal(signal.to_dict())
+                        trade_statuses = ", ".join([f"{t.broker_account_id or 'default'}:{t.status}" for t in trades])
                         self.stdout.write(
                             self.style.SUCCESS(
                                 f"     {ticker}: 🔥 {signal.action.upper()} "
-                                f"{qty} @ ${signal.price} → {trade.status}\n"
+                                f"{qty} @ ${signal.price} → [{trade_statuses}]\n"
                                 f"              Reason: {signal.reason}"
                             )
                         )

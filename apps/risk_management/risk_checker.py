@@ -35,7 +35,10 @@ def check_trade(signal: dict, account=None) -> tuple[bool, str]:
     Returns:
         (approved: bool, reason: str).
     """
-    config = RiskConfig.objects.filter(is_active=True).first()
+    # Bypass Djongo boolean filter SQLDecodeError
+    configs = RiskConfig.objects.all()
+    config = next((c for c in configs if c.is_active), None)
+
     if not config:
         logger.error("No active RiskConfig found — rejecting trade")
         return (False, "No active risk configuration found")
@@ -135,7 +138,7 @@ def _check_daily_drawdown(config: RiskConfig) -> tuple[bool, str]:
         realized_pnl__isnull=False,
     )
     for trade in today_trades:
-        daily_pnl += trade.realized_pnl
+        daily_pnl += Decimal(str(trade.realized_pnl))
 
     # If P&L is positive, no drawdown concern
     if daily_pnl >= 0:
@@ -146,11 +149,12 @@ def _check_daily_drawdown(config: RiskConfig) -> tuple[bool, str]:
     # TODO (Layer 1+): Use actual account equity from Alpaca
     loss_pct = abs(daily_pnl)  # Dollar amount for now
 
-    if abs(daily_pnl) >= config.daily_loss_limit:
+    loss_limit = Decimal(str(config.daily_loss_limit))
+    if abs(daily_pnl) >= loss_limit:
         return (
             False,
             f"Daily drawdown limit reached — lost ${abs(daily_pnl):.2f} "
-            f"(limit: ${config.daily_loss_limit})"
+            f"(limit: ${loss_limit})"
         )
 
     return (True, f"Daily P&L within limits (${daily_pnl})")
@@ -161,20 +165,21 @@ def _check_daily_loss_limit(config: RiskConfig) -> tuple[bool, str]:
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    daily_pnl = Decimal("0.00")
-    today_trades = Trade.objects.filter(
+    daily_pnl = Decimal("0")
+    today_closed = Trade.objects.filter(
         created_at__gte=today_start,
         status="filled",
         realized_pnl__isnull=False,
     )
-    for trade in today_trades:
-        daily_pnl += trade.realized_pnl
+    for trade in today_closed:
+        daily_pnl += Decimal(str(trade.realized_pnl))
 
-    if daily_pnl < 0 and abs(daily_pnl) >= config.daily_loss_limit:
+    loss_limit = Decimal(str(config.daily_loss_limit))
+    if daily_pnl < Decimal("0") and abs(daily_pnl) >= loss_limit:
         return (
             False,
             f"Daily loss limit hit — ${abs(daily_pnl):.2f} lost "
-            f"(limit: ${config.daily_loss_limit})"
+            f"(limit: ${loss_limit})"
         )
 
     return (True, f"Within daily dollar loss limit")
@@ -245,13 +250,14 @@ def _check_position_size(config: RiskConfig, signal: dict, account=None) -> tupl
     except Exception:
         pass  # Use fallback
 
-    max_position_value = equity * (config.max_position_size_pct / Decimal("100"))
+    max_pct = Decimal(str(config.max_position_size_pct))
+    max_position_value = equity * (max_pct / Decimal("100"))
 
     if order_value > max_position_value:
         return (
             False,
             f"Position too large — ${order_value:.2f} exceeds "
-            f"{config.max_position_size_pct}% of equity (${max_position_value:.2f})"
+            f"{max_pct}% of equity (${max_position_value:.2f})"
         )
 
     return (True, f"Position size OK (${order_value:.2f} / ${max_position_value:.2f} max)")
@@ -275,24 +281,24 @@ def _check_sell_above_cost_basis(signal: dict) -> tuple[bool, str]:
         return (True, "Market sell — no price to compare against cost basis")
 
     # Look up average cost basis from filled buy trades
-    buys = Trade.objects.filter(
-        symbol=ticker, side="buy", status="filled",
-        cost_basis__isnull=False, cost_basis__gt=0,
+    all_buys = Trade.objects.filter(
+        symbol=ticker, side="buy", status="filled"
     )
+    
+    total_cost = Decimal("0")
+    total_qty = Decimal("0")
+    
+    for b in all_buys:
+        if b.cost_basis is not None and Decimal(str(b.cost_basis)) > 0:
+            qty = Decimal(str(b.quantity))
+            cb = Decimal(str(b.cost_basis))
+            total_cost += cb * qty
+            total_qty += qty
 
-    if not buys.exists():
-        return (True, f"No cost basis history for {ticker} — sell allowed")
-
-    from django.db.models import Sum, F
-    result = buys.aggregate(
-        total_cost=Sum(F("cost_basis") * F("quantity")),
-        total_qty=Sum("quantity"),
-    )
-
-    if not result["total_qty"] or result["total_qty"] <= 0:
+    if total_qty <= Decimal("0"):
         return (True, f"No position quantity for {ticker}")
 
-    avg_cost = result["total_cost"] / result["total_qty"]
+    avg_cost = total_cost / total_qty
 
     if signal_price < avg_cost:
         return (

@@ -11,42 +11,69 @@ from decimal import Decimal
 
 from django.db.models import Sum, F
 
-from .models import Trade
+from apps.execution_engine.models import Trade
 from apps.risk_management.risk_checker import check_trade
 from apps.broker_connector.alpaca_client import AlpacaClient
+from apps.dashboard.models import Strategy
+from apps.risk_management.prop_firm_models import PropFirmAccount
 
 logger = logging.getLogger(__name__)
 
 
-def execute_signal(signal: dict) -> Trade:
+def execute_signal(signal: dict) -> list[Trade]:
     """
-    Execute a validated trade signal through the full pipeline.
+    Execute a validated trade signal across all authorized accounts (copy trading).
 
-    Pipeline: signal → risk check → broker order → cost basis → trade record.
+    Pipeline: signal → lookup strategy accounts → (for each account) → risk check → broker order → trade record.
 
     Args:
-        signal: Validated signal dict with keys:
-            ticker, action, quantity, price, strategy, timestamp.
-
+        signal: Validated signal dict.
+        
     Returns:
-        Trade object with execution results.
+        List of Trade objects.
+    """
+    strategy_name = signal.get("strategy")
+    strategy_obj = Strategy.objects.filter(name=strategy_name).first()
+    
+    accounts = []
+    if strategy_obj and strategy_obj.is_active and strategy_obj.account_numbers:
+        acct_list = [x.strip() for x in strategy_obj.account_numbers.split(",") if x.strip()]
+        if acct_list:
+            accounts = list(PropFirmAccount.objects.filter(
+                account_number__in=acct_list,
+                is_active=True
+            ))
+        
+    if not accounts:
+        # Fallback to no-account (default Alpaca)
+        accounts = [None]
+        
+    trades = []
+    for account in accounts:
+        trade = _execute_single_trade(signal, account)
+        trades.append(trade)
+        
+    return trades
 
-    Raises:
-        Exception: If broker order submission fails.
+
+def _execute_single_trade(signal: dict, account) -> Trade:
+    """
+    Execute a trade for a single specific account.
     """
     # --- Step 1: Create pending trade record ---
     trade = Trade.objects.create(
         symbol=signal["ticker"],
         side=signal["action"],
-        quantity=Decimal(signal["quantity"]),
-        requested_price=Decimal(signal.get("price", "0")) or None,
+        quantity=Decimal(str(signal["quantity"])),
+        requested_price=Decimal(str(signal.get("price", "0"))) or None,
         strategy=signal["strategy"],
         status="pending",
+        broker_account_id=account.account_number if account else "",
     )
-    logger.info("Trade %s created: %s %s %s", trade.trade_id, trade.side, trade.quantity, trade.symbol)
+    logger.info("Trade %s created: %s %s %s (Acct: %s)", trade.trade_id, trade.side, trade.quantity, trade.symbol, trade.broker_account_id)
 
     # --- Step 2: Risk check ---
-    approved, reason = check_trade(signal, account=None)
+    approved, reason = check_trade(signal, account=account)
     trade.risk_approved = approved
     trade.risk_reason = reason
 
@@ -134,20 +161,20 @@ def _get_average_cost_basis(symbol: str) -> Decimal | None:
     Returns the weighted average price (total cost / total shares).
     """
     buys = Trade.objects.filter(
-        symbol=symbol, side="buy", status="filled",
-        cost_basis__isnull=False, cost_basis__gt=0,
+        symbol=symbol, side="buy", status="filled"
     )
 
-    if not buys.exists():
-        return None
+    total_cost = Decimal("0")
+    total_qty = Decimal("0")
 
-    # Weighted average: sum(cost_basis × quantity) / sum(quantity)
-    result = buys.aggregate(
-        total_cost=Sum(F("cost_basis") * F("quantity")),
-        total_qty=Sum("quantity"),
-    )
+    for b in buys:
+        if b.cost_basis is not None and Decimal(str(b.cost_basis)) > 0:
+            qty = Decimal(str(b.quantity))
+            cb = Decimal(str(b.cost_basis))
+            total_cost += cb * qty
+            total_qty += qty
 
-    if result["total_qty"] and result["total_qty"] > 0:
-        return result["total_cost"] / result["total_qty"]
+    if total_qty > Decimal("0"):
+        return total_cost / total_qty
 
     return None

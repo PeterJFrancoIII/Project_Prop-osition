@@ -71,27 +71,29 @@ class WebhookReceiveView(APIView):
 
         # --- Step 5: Dispatch to execution engine ---
         try:
-            trade = execute_signal(validated)
+            trades = execute_signal(validated)
             webhook_event.status = "dispatched"
             webhook_event.save()
+            
+            trade_ids = [t.trade_id for t in trades]
             logger.info(
-                "Webhook dispatched → Trade %s | %s %s %s",
-                trade.trade_id,
-                trade.side,
-                trade.quantity,
-                trade.symbol,
+                "Webhook dispatched → Trades %s | %s %s %s",
+                trade_ids,
+                validated["action"],
+                validated["quantity"],
+                validated["ticker"],
             )
             return Response(
                 {
                     "status": "success",
                     "data": {
                         "webhook_id": webhook_event.webhook_id,
-                        "trade_id": trade.trade_id,
-                        "symbol": trade.symbol,
-                        "side": trade.side,
-                        "quantity": trade.quantity,
+                        "trade_ids": trade_ids,
+                        "symbol": validated["ticker"],
+                        "side": validated["action"],
+                        "quantity": validated["quantity"],
                     },
-                    "message": "Signal received and trade executed",
+                    "message": f"Signal received and {len(trades)} trades executed",
                 },
                 status=status.HTTP_200_OK,
             )

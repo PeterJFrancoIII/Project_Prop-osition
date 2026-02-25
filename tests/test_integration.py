@@ -57,7 +57,8 @@ class IntegrationPipelineTests(TestCase):
             "timestamp": "2026-01-01T10:00:00Z",
         }
 
-        trade = execute_signal(signal)
+        trades = execute_signal(signal)
+        trade = trades[0]
 
         self.assertEqual(trade.status, "filled")
         self.assertEqual(trade.symbol, "AAPL")
@@ -106,7 +107,8 @@ class IntegrationPipelineTests(TestCase):
             "timestamp": "2026-01-02T10:00:00Z",
         }
 
-        trade = execute_signal(signal)
+        trades = execute_signal(signal)
+        trade = trades[0]
 
         self.assertEqual(trade.status, "filled")
         self.assertTrue(trade.risk_approved)
@@ -127,7 +129,8 @@ class IntegrationPipelineTests(TestCase):
             "strategy": "momentum_v1",
         }
 
-        trade = execute_signal(signal)
+        trades = execute_signal(signal)
+        trade = trades[0]
 
         self.assertEqual(trade.status, "rejected")
         self.assertFalse(trade.risk_approved)
@@ -153,7 +156,8 @@ class IntegrationPipelineTests(TestCase):
             "strategy": "momentum_v1",
         }
 
-        trade = execute_signal(signal)
+        trades = execute_signal(signal)
+        trade = trades[0]
 
         self.assertEqual(trade.status, "rejected")
         self.assertFalse(trade.risk_approved)
@@ -181,7 +185,8 @@ class IntegrationPipelineTests(TestCase):
             "strategy": "momentum_v1",
         }
 
-        trade = execute_signal(signal)
+        trades = execute_signal(signal)
+        trade = trades[0]
 
         # The trade itself is the 3rd, but 2 existed before + this one = 3 > limit of 2
         # Actually the check runs AFTER creating the trade record, so count = 3 >= 2

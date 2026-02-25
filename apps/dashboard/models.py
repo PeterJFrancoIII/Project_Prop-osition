@@ -60,6 +60,11 @@ class Strategy(models.Model):
         help_text="List of ticker symbols this strategy trades"
     )
 
+    account_numbers = models.CharField(
+        max_length=255, blank=True, default="",
+        help_text="Comma-separated broker_account_id strings where this strategy runs"
+    )
+
     # Position management
     position_size_pct = models.DecimalField(
         max_digits=5, decimal_places=2, default=2.00,
