@@ -285,13 +285,35 @@ def risk(request):
     trades_today = Trade.objects.filter(created_at__gte=today_start)
     daily_pnl = sum(t.realized_pnl for t in trades_today if t.realized_pnl) or Decimal("0.00")
 
+    # Live Alpaca data — drawdown % and open positions
+    daily_drawdown_pct = Decimal("0.00")
+    open_positions = 0
+    account_equity = Decimal("100000.00")
+    try:
+        from apps.broker_connector.alpaca_client import AlpacaClient
+        client = AlpacaClient()
+        acct = client.get_account()
+        account_equity = Decimal(str(acct["equity"]))
+        positions = client.get_positions()
+        open_positions = len(positions)
+        # Calculate daily drawdown: (starting equity - current) / starting equity × 100
+        if account_equity > 0 and daily_pnl < 0:
+            daily_drawdown_pct = abs(daily_pnl) / account_equity * Decimal("100")
+    except Exception:
+        # Fallback: approximate open positions from trade records
+        buys = set(Trade.objects.filter(side="buy", status="filled").values_list("symbol", flat=True))
+        sells = set(Trade.objects.filter(side="sell", status="filled").values_list("symbol", flat=True))
+        open_positions = len(buys - sells)
+        if account_equity > 0 and daily_pnl < 0:
+            daily_drawdown_pct = abs(daily_pnl) / account_equity * Decimal("100")
+
     ctx = {
         **_base_context(),
         "active_page": "risk",
         "risk_config": risk_config,
         "daily_pnl": daily_pnl,
-        "daily_drawdown_pct": Decimal("0.00"),  # Placeholder
-        "open_positions": 0,  # Placeholder — will sync from Alpaca
+        "daily_drawdown_pct": daily_drawdown_pct,
+        "open_positions": open_positions,
         "trades_today_count": trades_today.count(),
         "risk_decisions": Trade.objects.all().order_by("-created_at")[:10],
     }
@@ -358,10 +380,10 @@ def system(request):
         "errors": webhooks_24h.filter(status="error").count(),
     }
 
-    # Connection checks (basic — will improve in Layer 1)
+    # Connection checks — real health pings
     mongo_connected = True  # If we got this far, Django/Djongo is connected
     redis_connected = _check_redis()
-    alpaca_connected = bool(settings.BROKER_ALPACA_API_KEY)
+    alpaca_connected = _check_alpaca()
 
     ctx = {
         **_base_context(),
@@ -443,5 +465,17 @@ def _check_redis():
         r = redis.from_url(settings.REDIS_URL)
         r.ping()
         return True
+    except Exception:
+        return False
+
+
+def _check_alpaca():
+    """Real Alpaca API health ping — actually calls get_account()."""
+    try:
+        from apps.broker_connector.alpaca_client import AlpacaClient
+        client = AlpacaClient()
+        acct = client.get_account()
+        # Connected if we get a status back
+        return acct.get("status") == "ACTIVE"
     except Exception:
         return False

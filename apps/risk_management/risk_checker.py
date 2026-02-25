@@ -49,6 +49,7 @@ def check_trade(signal: dict, account=None) -> tuple[bool, str]:
         ("daily_trade_count", _check_daily_trade_count, (config,)),
         ("max_open_positions", _check_max_open_positions, (config, account)),
         ("position_size", _check_position_size, (config, signal, account)),
+        ("sell_above_cost", _check_sell_above_cost_basis, (signal,)),
     ]
 
     for name, check_fn, args in checks:
@@ -254,3 +255,51 @@ def _check_position_size(config: RiskConfig, signal: dict, account=None) -> tupl
         )
 
     return (True, f"Position size OK (${order_value:.2f} / ${max_position_value:.2f} max)")
+
+
+def _check_sell_above_cost_basis(signal: dict) -> tuple[bool, str]:
+    """
+    Reject sell orders where the signal price is below the average cost basis.
+
+    Arch Public principle: never sell at a loss if it can be avoided.
+    Only applies to sell orders with a known price.
+    """
+    if signal.get("action") != "sell":
+        return (True, "Not a sell order — cost basis check skipped")
+
+    ticker = signal.get("ticker", "")
+    signal_price = Decimal(str(signal.get("price", "0")))
+
+    if signal_price <= 0:
+        # Market order — can't enforce price-based check
+        return (True, "Market sell — no price to compare against cost basis")
+
+    # Look up average cost basis from filled buy trades
+    buys = Trade.objects.filter(
+        symbol=ticker, side="buy", status="filled",
+        cost_basis__isnull=False, cost_basis__gt=0,
+    )
+
+    if not buys.exists():
+        return (True, f"No cost basis history for {ticker} — sell allowed")
+
+    from django.db.models import Sum, F
+    result = buys.aggregate(
+        total_cost=Sum(F("cost_basis") * F("quantity")),
+        total_qty=Sum("quantity"),
+    )
+
+    if not result["total_qty"] or result["total_qty"] <= 0:
+        return (True, f"No position quantity for {ticker}")
+
+    avg_cost = result["total_cost"] / result["total_qty"]
+
+    if signal_price < avg_cost:
+        return (
+            False,
+            f"Sell below cost basis rejected — sell ${signal_price:.2f} < "
+            f"avg cost ${avg_cost:.2f} for {ticker}"
+        )
+
+    profit_pct = ((signal_price - avg_cost) / avg_cost) * 100
+    return (True, f"Sell above cost basis (${signal_price:.2f} vs ${avg_cost:.2f}, +{profit_pct:.1f}%)")

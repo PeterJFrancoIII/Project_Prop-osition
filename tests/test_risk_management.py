@@ -22,6 +22,7 @@ from apps.risk_management.risk_checker import (
     _check_daily_trade_count,
     _check_max_open_positions,
     _check_position_size,
+    _check_sell_above_cost_basis,
 )
 
 
@@ -233,3 +234,41 @@ class FullPipelineTests(TestCase):
         approved, reason = check_trade(self.valid_signal)
         self.assertTrue(approved)
         self.assertIn("All risk checks passed", reason)
+
+
+class SellAboveCostBasisTests(TestCase):
+    """Sell orders must not be below cost basis."""
+
+    def test_buy_signal_skips_check(self):
+        signal = {"ticker": "AAPL", "action": "buy", "quantity": "10", "price": "150"}
+        approved, reason = _check_sell_above_cost_basis(signal)
+        self.assertTrue(approved)
+        self.assertIn("Not a sell", reason)
+
+    def test_no_cost_history_allows_sell(self):
+        signal = {"ticker": "AAPL", "action": "sell", "quantity": "10", "price": "150"}
+        approved, reason = _check_sell_above_cost_basis(signal)
+        self.assertTrue(approved)
+        self.assertIn("No cost basis", reason)
+
+    def test_sell_above_cost_passes(self):
+        Trade.objects.create(
+            symbol="AAPL", side="buy", quantity=Decimal("10"),
+            fill_price=Decimal("100.00"), cost_basis=Decimal("100.00"),
+            status="filled", strategy="test", risk_approved=True,
+        )
+        signal = {"ticker": "AAPL", "action": "sell", "quantity": "10", "price": "120"}
+        approved, reason = _check_sell_above_cost_basis(signal)
+        self.assertTrue(approved)
+        self.assertIn("above cost basis", reason.lower())
+
+    def test_sell_below_cost_blocks(self):
+        Trade.objects.create(
+            symbol="AAPL", side="buy", quantity=Decimal("10"),
+            fill_price=Decimal("200.00"), cost_basis=Decimal("200.00"),
+            status="filled", strategy="test", risk_approved=True,
+        )
+        signal = {"ticker": "AAPL", "action": "sell", "quantity": "10", "price": "180"}
+        approved, reason = _check_sell_above_cost_basis(signal)
+        self.assertFalse(approved)
+        self.assertIn("below cost basis", reason.lower())
