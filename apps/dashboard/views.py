@@ -23,6 +23,7 @@ from django.views.decorators.http import require_POST
 from apps.broker_connector.models import BrokerAccount
 from apps.execution_engine.models import Trade
 from apps.risk_management.models import RiskConfig
+from apps.risk_management.prop_firm_models import PropFirmAccount
 from apps.webhooks.models import WebhookEvent
 from .models import AIModel, Strategy
 
@@ -79,6 +80,16 @@ def overview(request):
     strategies = Strategy.objects.all()
     active_strategies = strategies.filter(is_active=True).count()
 
+    # Equity — try live Alpaca, fallback to placeholder
+    account_equity = Decimal("100000.00")
+    try:
+        from apps.broker_connector.alpaca_client import AlpacaClient
+        client = AlpacaClient()
+        acct = client.get_account()
+        account_equity = Decimal(str(acct["equity"]))
+    except Exception:
+        pass  # Use placeholder sync from Alpaca
+
     ctx = {
         **_base_context(),
         "active_page": "overview",
@@ -88,7 +99,7 @@ def overview(request):
         "trades_today": trades_today,
         "trades_won": trades_won,
         "trades_lost": trades_lost,
-        "account_equity": Decimal("100000.00"),  # Placeholder — will sync from Alpaca
+        "account_equity": account_equity,
         "active_strategies": active_strategies,
         "total_strategies": strategies.count(),
         "win_rate": win_rate,
@@ -367,6 +378,20 @@ def system(request):
         "server_time": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
     return render(request, "dashboard/system.html", ctx)
+
+
+# ──────────────────────────────────────────────
+# Prop Firm Accounts Page
+# ──────────────────────────────────────────────
+
+def prop_firms(request):
+    """Prop firm accounts — track challenge progress and compliance."""
+    ctx = {
+        **_base_context(),
+        "active_page": "prop_firms",
+        "prop_accounts": PropFirmAccount.objects.filter(is_active=True),
+    }
+    return render(request, "dashboard/prop_firms.html", ctx)
 
 
 # ──────────────────────────────────────────────

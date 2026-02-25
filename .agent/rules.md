@@ -342,3 +342,6 @@ Each new app must include a `MODULE.md` in its directory containing:
 | 2026-02-25 | Added equity curve chart | Chart.js line chart on overview page, JSON API endpoint at /api/equity-data/, 60s auto-refresh, gradient fill | 0 |
 | 2026-02-25 | Added accounts page | Broker accounts view at /accounts/, sidebar nav link, security notice card; full CRUD deferred to Layer 1 | 0 |
 | 2026-02-25 | Added dashboard tests | test_dashboard.py with 12 tests: page views, HTMX fragment correctness, kill switch, strategy toggle, risk config update | 0 |
+| 2026-02-25 | Implemented full risk checker | 7 safety checks: kill switch, market hours (stocks 9:30-16:00 ET), daily drawdown, loss limit, trade count, max positions, position size; all config-driven from RiskConfig model | 0 |
+| 2026-02-25 | Added PropFirmAccount model | Tracks challenge phases, P&L targets, drawdown limits, compliance checking; supports FTMO, Trade The Pool, Topstep, etc. | 0 |
+| 2026-02-25 | Added prop firms dashboard page | /prop-firms/ with progress bars, drawdown monitors, income projection table; admin registered with editable phase | 0 |

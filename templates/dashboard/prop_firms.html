@@ -1,0 +1,198 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Prop Firms{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Prop Firm Accounts</h2>
+        <p class="subtitle">Track challenge progress, P&L targets, and firm compliance</p>
+    </div>
+    <a href="/admin/risk_management/propfirmaccount/add/" class="btn btn-primary" target="_blank">
+        + Add Account
+    </a>
+</div>
+
+{% for account in prop_accounts %}
+<div class="card mb-md">
+    <div class="strategy-header">
+        <div>
+            <div class="strategy-name">{{ account.name }}</div>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:4px;">
+                {{ account.get_firm_display }}
+                {% if account.account_number %} · {{ account.account_number }}{% endif %}
+            </p>
+        </div>
+        <div class="flex gap-md" style="align-items:center;">
+            <span class="badge
+                {% if account.phase == 'funded' %}badge-green
+                {% elif account.phase == 'evaluation' or account.phase == 'verification' %}badge-blue
+                {% elif account.phase == 'failed' %}badge-red
+                {% else %}badge-yellow{% endif %}">
+                {{ account.get_phase_display|upper }}
+            </span>
+            {% if account.is_passing %}
+            <span class="badge badge-green">✓ PASSING</span>
+            {% else %}
+            <span class="badge badge-red">✗ AT RISK</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Progress Bars -->
+    <div class="grid-2" style="margin-top:var(--gap-lg);">
+        <!-- Profit Target Progress -->
+        <div>
+            <div class="form-label">Profit Target Progress</div>
+            <div
+                style="background:var(--bg-input); border-radius:var(--radius); height:24px; overflow:hidden; position:relative; margin-top:var(--gap-xs);">
+                <div style="
+                    height:100%;
+                    width:{% if account.progress_pct > 100 %}100{% else %}{{ account.progress_pct|floatformat:0 }}{% endif %}%;
+                    background: linear-gradient(90deg, var(--blue), var(--green));
+                    border-radius:var(--radius);
+                    transition: width 0.5s;
+                "></div>
+                <span
+                    style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.7rem; font-weight:700; color:var(--text-primary);">
+                    {{ account.progress_pct|floatformat:1 }}%
+                </span>
+            </div>
+            <div
+                style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-top:2px;">
+                <span>${{ account.total_pnl|floatformat:2 }} earned</span>
+                <span>Target: ${{ account.profit_target_amount|floatformat:2 }}</span>
+            </div>
+        </div>
+
+        <!-- Drawdown Monitor -->
+        <div>
+            <div class="form-label">Total Drawdown</div>
+            <div
+                style="background:var(--bg-input); border-radius:var(--radius); height:24px; overflow:hidden; position:relative; margin-top:var(--gap-xs);">
+                <div style="
+                    height:100%;
+                    width:{% if account.total_drawdown_pct > 0 %}{{ account.total_drawdown_pct|floatformat:0 }}{% else %}0{% endif %}%;
+                    max-width:100%;
+                    background: {% if account.total_drawdown_pct >= account.max_total_drawdown_pct %}var(--red){% elif account.total_drawdown_pct >= 7 %}var(--yellow){% else %}var(--green){% endif %};
+                    border-radius:var(--radius);
+                    transition: width 0.5s;
+                "></div>
+                <span
+                    style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.7rem; font-weight:700; color:var(--text-primary);">
+                    {{ account.total_drawdown_pct|floatformat:2 }}% / {{ account.max_total_drawdown_pct }}%
+                </span>
+            </div>
+            <div
+                style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--text-muted); margin-top:2px;">
+                <span>Current: {{ account.total_drawdown_pct|floatformat:2 }}%</span>
+                <span>Max Allowed: {{ account.max_total_drawdown_pct }}%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr); margin-top:var(--gap-lg); margin-bottom:0;">
+        <div class="stat-card">
+            <div class="stat-label">Account Size</div>
+            <div class="stat-value neutral" style="font-size:1.1rem;">${{ account.account_size|floatformat:0 }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Current Equity</div>
+            <div class="stat-value {% if account.current_equity >= account.account_size %}positive{% else %}negative{% endif %}"
+                style="font-size:1.1rem;">
+                ${{ account.current_equity|floatformat:2 }}
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total P&L</div>
+            <div class="stat-value {% if account.total_pnl >= 0 %}positive{% else %}negative{% endif %}"
+                style="font-size:1.1rem;">
+                {% if account.total_pnl >= 0 %}+{% endif %}${{ account.total_pnl|floatformat:2 }}
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">P&L Remaining</div>
+            <div class="stat-value neutral" style="font-size:1.1rem;">${{ account.pnl_remaining|floatformat:2 }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Profit Split</div>
+            <div class="stat-value neutral" style="font-size:1.1rem;">{{ account.profit_split_pct }}%</div>
+        </div>
+    </div>
+
+    <!-- Details Row -->
+    <div class="flex gap-lg"
+        style="margin-top:var(--gap-sm); padding-top:var(--gap-sm); border-top:1px solid var(--border);">
+        <div style="font-size:0.75rem;">
+            <span style="color:var(--text-muted);">Trading Days:</span>
+            <strong>{{ account.trading_days_completed }} / {{ account.min_trading_days }}</strong>
+        </div>
+        <div style="font-size:0.75rem;">
+            <span style="color:var(--text-muted);">Max Daily DD:</span>
+            <strong>{{ account.max_daily_drawdown_pct }}% (${{ account.max_daily_drawdown_amount|floatformat:0
+                }})</strong>
+        </div>
+        {% if account.challenge_start_date %}
+        <div style="font-size:0.75rem;">
+            <span style="color:var(--text-muted);">Started:</span>
+            <strong>{{ account.challenge_start_date|date:"M d, Y" }}</strong>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% empty %}
+<div class="card">
+    <div class="empty-state">
+        <div class="icon">🏦</div>
+        <p>No prop firm accounts configured yet.</p>
+        <p style="margin-top:8px; font-size:0.75rem;">
+            Add your first prop firm account to start tracking challenge progress.
+        </p>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Income Projection Card -->
+<div class="card mt-lg">
+    <div class="card-header">
+        <span class="card-title">💰 Income Projection</span>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Scenario</th>
+                    <th>Funded Capital</th>
+                    <th>Monthly Return (5%)</th>
+                    <th>Profit Split (80%)</th>
+                    <th>Your Monthly Income</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1 Account</td>
+                    <td>$50,000</td>
+                    <td>$2,500</td>
+                    <td>80%</td>
+                    <td style="color:var(--green); font-weight:700;">$2,000/mo</td>
+                </tr>
+                <tr>
+                    <td>3 Accounts</td>
+                    <td>$150,000</td>
+                    <td>$7,500</td>
+                    <td>80%</td>
+                    <td style="color:var(--green); font-weight:700;">$6,000/mo</td>
+                </tr>
+                <tr>
+                    <td>5 Accounts</td>
+                    <td>$300,000</td>
+                    <td>$15,000</td>
+                    <td>80%</td>
+                    <td style="color:var(--green); font-weight:700;">$12,000/mo</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -68,6 +68,10 @@
                     class="nav-link {% if active_page == 'accounts' %}active{% endif %}">
                     <span class="icon">🏦</span> Accounts
                 </a>
+                <a href="{% url 'dashboard:prop-firms' %}"
+                    class="nav-link {% if active_page == 'prop_firms' %}active{% endif %}">
+                    <span class="icon">🏆</span> Prop Firms
+                </a>
             </nav>
 
             <div class="sidebar-footer">

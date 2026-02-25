@@ -32,6 +32,9 @@ urlpatterns = [
     # Accounts
     path("accounts/", views.accounts, name="accounts"),
 
+    # Prop Firms
+    path("prop-firms/", views.prop_firms, name="prop-firms"),
+
     # API (JSON)
     path("api/equity-data/", views.equity_data_api, name="equity-data"),
 ]
