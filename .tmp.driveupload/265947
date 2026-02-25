@@ -349,3 +349,8 @@ Each new app must include a `MODULE.md` in its directory containing:
 | 2026-02-25 | Wired live Alpaca into risk + system | Risk page shows live drawdown % and open positions; system page does real Alpaca health ping instead of just checking API key | 0 |
 | 2026-02-25 | Added cost basis tracking to executor | Buys record cost_basis = fill_price; sells calculate realized_pnl = (fill_price - weighted_avg_cost) × quantity | 0 |
 | 2026-02-25 | Added integration tests | test_integration.py with 5 full-pipeline tests: buy + cost basis, sell + P&L, kill switch reject, sell-below-cost reject, trade limit | 0 |
+| 2026-02-25 | Added BaseStrategy framework | Abstract base class with Signal output, config-driven initialization, and standard interface (generate_signal, position_size, check_exit) | 0 |
+| 2026-02-25 | Added technical indicators | 8 pure-Python indicators: SMA, EMA, RSI, VWAP, Bollinger Bands, Z-Score, ATR, MACD. Operates on OHLCV dicts or float lists | 0 |
+| 2026-02-25 | Added Layer 2 strategies | Momentum Breakout (SMA breakout + volume + RSI) and Mean Reversion (Bollinger + Z-Score oversold + SMA200 filter) | 0 |
+| 2026-02-25 | Added backtesting engine | Vectorized simulation with daily equity curve, max drawdown, Sharpe ratio, win rate, and total return calculation | 0 |
+| 2026-02-25 | Added strategy runner | Periodic task scanner: queries active Strategy models, aggregates signals, calculates position size, and dispatches to executor | 0 |
