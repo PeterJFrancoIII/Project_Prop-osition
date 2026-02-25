@@ -29,7 +29,7 @@ This document tracks which AI models built which components of the Auto-Trader, 
 - **Backtesting Engine**: Vectorized backtester with Sharpe/drawdown/win-rate metrics (`apps/market_data/management/commands/backtest.py`)
 - **Strategy Runner**: Signal dispatch scanner (`apps/market_data/management/commands/run_strategies.py`)
 - **Test Suite**: `test_strategies.py` covering indicators and logic
-- **Multi-Account Routing**: `accounts` ManyToMany relation on Strategy model, routing logic in `executor.py` (In Progress)
+- **Multi-Account Routing**: `accounts` routing logic in `executor.py` mapped to PropFirmAccounts (Completed)
 
 ---
 *Note: This split assumes components built prior to the current context window were built by the previous AI sessions (Opus/Sonnet framework), while all Layer 2 multi-strategy engine work was explicitly written by Gemini.*
