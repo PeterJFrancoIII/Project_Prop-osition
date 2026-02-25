@@ -20,6 +20,8 @@ from apps.dashboard.models import Strategy
 from apps.execution_engine.executor import execute_signal
 from apps.strategies.momentum_breakout import MomentumBreakout
 from apps.strategies.mean_reversion import MeanReversion
+from apps.strategies.sector_rotation import SectorRotation
+from apps.strategies.smart_dca import SmartDCA
 from apps.strategies.base import BaseStrategy
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,8 @@ logger = logging.getLogger(__name__)
 STRATEGY_CLASSES = {
     "momentum_breakout": MomentumBreakout,
     "mean_reversion": MeanReversion,
+    "sector_rotation": SectorRotation,
+    "smart_dca": SmartDCA,
 }
 
 
@@ -69,8 +73,8 @@ class Command(BaseCommand):
         if not StrategyCls:
             self.stdout.write(
                 self.style.WARNING(
-                    f"  ⚠️  {db_strategy.name}: no strategy_type in custom_params "
-                    f"(set to 'momentum_breakout' or 'mean_reversion')"
+                    f"  ⚠️  {db_strategy.name}: no/invalid strategy_type in custom_params "
+                    f"(supported: {', '.join(STRATEGY_CLASSES.keys())})"
                 )
             )
             return

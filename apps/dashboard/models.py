@@ -67,23 +67,23 @@ class Strategy(models.Model):
 
     # Position management
     position_size_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=2.00,
+        max_digits=5, decimal_places=2, default="2.00",
         help_text="Position size as % of account equity"
     )
     max_positions = models.IntegerField(default=5)
     stop_loss_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=2.00,
+        max_digits=5, decimal_places=2, default="2.00",
         help_text="Stop loss as % from entry"
     )
     take_profit_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=4.00,
+        max_digits=5, decimal_places=2, default="4.00",
         help_text="Take profit as % from entry"
     )
 
     # AI model configuration
     ai_model = models.CharField(max_length=30, choices=AI_MODEL_CHOICES, default="none")
     ai_confidence_threshold = models.DecimalField(
-        max_digits=3, decimal_places=2, default=0.70,
+        max_digits=3, decimal_places=2, default="0.70",
         help_text="Min confidence score to act on AI signal (0-1)"
     )
     ai_retrain_freq = models.CharField(max_length=20, default="weekly")
@@ -109,6 +109,38 @@ class Strategy(models.Model):
     def __str__(self):
         status = "🟢" if self.is_active else "⏸️"
         return f"{status} {self.name} | {self.asset_class} | {self.timeframe} | AI: {self.ai_model}"
+
+    @property
+    def total_pnl(self):
+        """Sum of realized P&L for all filled trades from this strategy."""
+        from apps.execution_engine.models import Trade
+        from decimal import Decimal
+        trades = Trade.objects.filter(strategy=self.name, status="filled")
+        total = Decimal("0.00")
+        for t in trades:
+            if t.realized_pnl is not None:
+                total += Decimal(str(t.realized_pnl))
+        return total
+
+    @property
+    def win_rate(self):
+        """Percentage of winning sell trades."""
+        from apps.execution_engine.models import Trade
+        from decimal import Decimal
+        sells = Trade.objects.filter(strategy=self.name, side="sell", status="filled")
+        total_sells = sells.count()
+        if total_sells == 0:
+            return 0.0
+        wins = sum(1 for t in sells if t.realized_pnl and Decimal(str(t.realized_pnl)) > 0)
+        return (wins / total_sells) * 100
+
+    @property
+    def trades_today(self):
+        """Number of trades submitted today."""
+        from apps.execution_engine.models import Trade
+        from django.utils import timezone
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return Trade.objects.filter(strategy=self.name, created_at__gte=today_start).count()
 
 
 class AIModel(models.Model):

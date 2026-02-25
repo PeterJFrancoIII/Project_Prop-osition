@@ -59,18 +59,18 @@ def overview(request):
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Today's trades
-    trades_today_qs = Trade.objects.filter(created_at__gte=today_start)
-    trades_today = trades_today_qs.count()
-    trades_won = trades_today_qs.filter(realized_pnl__gt=0).count()
-    trades_lost = trades_today_qs.filter(realized_pnl__lt=0).count()
+    trades_today_qs = list(Trade.objects.filter(created_at__gte=today_start))
+    trades_today = len(trades_today_qs)
+    trades_won = len([t for t in trades_today_qs if t.realized_pnl and t.realized_pnl > 0])
+    trades_lost = len([t for t in trades_today_qs if t.realized_pnl and t.realized_pnl < 0])
 
     # P&L
     total_pnl = sum(t.realized_pnl for t in trades_today_qs if t.realized_pnl) or Decimal("0.00")
 
     # Win rate
-    filled_trades = Trade.objects.filter(status="filled")
-    total_filled = filled_trades.count()
-    wins = filled_trades.filter(realized_pnl__gt=0).count()
+    filled_trades = list(Trade.objects.filter(status="filled"))
+    total_filled = len(filled_trades)
+    wins = len([t for t in filled_trades if t.realized_pnl and t.realized_pnl > 0])
     win_rate = (wins / total_filled * 100) if total_filled > 0 else 0
 
     # Risk config
@@ -78,17 +78,15 @@ def overview(request):
 
     # Strategies
     strategies = Strategy.objects.all()
-    active_strategies = strategies.filter(is_active=True).count()
+    active_strategies = len([s for s in strategies if s.is_active])
 
-    # Equity — try live Alpaca, fallback to placeholder
-    account_equity = Decimal("100000.00")
+    # System-level Live connection (Optional ping)
     try:
         from apps.broker_connector.alpaca_client import AlpacaClient
         client = AlpacaClient()
-        acct = client.get_account()
-        account_equity = Decimal(str(acct["equity"]))
+        client.get_account()
     except Exception:
-        pass  # Use placeholder sync from Alpaca
+        pass
 
     ctx = {
         **_base_context(),
@@ -99,16 +97,13 @@ def overview(request):
         "trades_today": trades_today,
         "trades_won": trades_won,
         "trades_lost": trades_lost,
-        "account_equity": account_equity,
-        "active_strategies": active_strategies,
-        "total_strategies": strategies.count(),
         "win_rate": win_rate,
-        "daily_drawdown": Decimal("0.00"),  # Placeholder
         "max_daily_drawdown": risk_config.max_daily_drawdown_pct,
         # Tables
         "recent_trades": Trade.objects.all()[:10],
         "recent_events": WebhookEvent.objects.all()[:10],
         "strategies": strategies,
+        "accounts": [a for a in PropFirmAccount.objects.all() if a.is_active],
     }
     return render(request, "dashboard/overview.html", ctx)
 
@@ -118,15 +113,15 @@ def overview_stats_partial(request):
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    trades_today_qs = Trade.objects.filter(created_at__gte=today_start)
-    trades_today = trades_today_qs.count()
-    trades_won = trades_today_qs.filter(realized_pnl__gt=0).count()
-    trades_lost = trades_today_qs.filter(realized_pnl__lt=0).count()
+    trades_today_qs = list(Trade.objects.filter(created_at__gte=today_start))
+    trades_today = len(trades_today_qs)
+    trades_won = len([t for t in trades_today_qs if t.realized_pnl and t.realized_pnl > 0])
+    trades_lost = len([t for t in trades_today_qs if t.realized_pnl and t.realized_pnl < 0])
     total_pnl = sum(t.realized_pnl for t in trades_today_qs if t.realized_pnl) or Decimal("0.00")
 
-    filled_trades = Trade.objects.filter(status="filled")
-    total_filled = filled_trades.count()
-    wins = filled_trades.filter(realized_pnl__gt=0).count()
+    filled_trades = list(Trade.objects.filter(status="filled"))
+    total_filled = len(filled_trades)
+    wins = len([t for t in filled_trades if t.realized_pnl and t.realized_pnl > 0])
     win_rate = (wins / total_filled * 100) if total_filled > 0 else 0
 
     risk_config = _get_risk_config()
@@ -137,12 +132,11 @@ def overview_stats_partial(request):
         "trades_today": trades_today,
         "trades_won": trades_won,
         "trades_lost": trades_lost,
-        "account_equity": Decimal("100000.00"),
-        "active_strategies": strategies.filter(is_active=True).count(),
+        "active_strategies": len([s for s in strategies if s.is_active]),
         "total_strategies": strategies.count(),
         "win_rate": win_rate,
-        "daily_drawdown": Decimal("0.00"),
         "max_daily_drawdown": risk_config.max_daily_drawdown_pct,
+        "accounts": [a for a in PropFirmAccount.objects.all() if a.is_active],
     }
     return render(request, "dashboard/_partials/stats_grid.html", ctx)
 
@@ -372,12 +366,12 @@ def system(request):
     last_24h = now - timedelta(hours=24)
 
     # Webhook stats
-    webhooks_24h = WebhookEvent.objects.filter(created_at__gte=last_24h)
+    webhooks_24h = list(WebhookEvent.objects.filter(created_at__gte=last_24h))
     webhook_stats = {
-        "received": webhooks_24h.count(),
-        "dispatched": webhooks_24h.filter(status="dispatched").count(),
-        "rejected": webhooks_24h.filter(status="rejected").count(),
-        "errors": webhooks_24h.filter(status="error").count(),
+        "received": len(webhooks_24h),
+        "dispatched": len([w for w in webhooks_24h if w.status == "dispatched"]),
+        "rejected": len([w for w in webhooks_24h if w.status == "rejected"]),
+        "errors": len([w for w in webhooks_24h if w.status == "error"]),
     }
 
     # Connection checks — real health pings
@@ -411,7 +405,7 @@ def prop_firms(request):
     ctx = {
         **_base_context(),
         "active_page": "prop_firms",
-        "prop_accounts": PropFirmAccount.objects.filter(is_active=True),
+        "prop_accounts": [a for a in PropFirmAccount.objects.all() if a.is_active],
     }
     return render(request, "dashboard/prop_firms.html", ctx)
 

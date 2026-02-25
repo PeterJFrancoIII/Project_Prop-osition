@@ -203,7 +203,10 @@ Rules:
 - IP whitelisting where supported
 
 ### Trading Logic
-- Every strategy must implement the `BaseStrategy` interface
+- Every strategy must implement the `BaseStrategy` interface, consisting of:
+  - `generate_signal(self, ticker: str, bars: list) -> Signal`
+  - `calculate_position_size(self, ticker: str, price: Decimal, account_equity: Decimal) -> Decimal`
+  - `check_exit(self, ticker: str, entry_price: Decimal, current_price: Decimal, bars: list) -> Signal`
 - Every strategy must have a backtest before going live
 - All trades logged to MongoDB with: timestamp, strategy, symbol, side, qty, price, broker/exchange, fill status, P&L, cost_basis
 - Risk checks run BEFORE every order submission (never after)
@@ -354,3 +357,4 @@ Each new app must include a `MODULE.md` in its directory containing:
 | 2026-02-25 | Added Layer 2 strategies | Momentum Breakout (SMA breakout + volume + RSI) and Mean Reversion (Bollinger + Z-Score oversold + SMA200 filter) | 0 |
 | 2026-02-25 | Added backtesting engine | Vectorized simulation with daily equity curve, max drawdown, Sharpe ratio, win rate, and total return calculation | 0 |
 | 2026-02-25 | Added strategy runner | Periodic task scanner: queries active Strategy models, aggregates signals, calculates position size, and dispatches to executor | 0 |
+| 2026-02-25 | Defined BaseStrategy interface | Formalized the standard API required for all custom strategies to plug into the execution pipeline | 2 |

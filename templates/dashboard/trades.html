@@ -21,18 +21,18 @@
             <label class="form-label">Side</label>
             <select name="side" class="form-select">
                 <option value="">All</option>
-                <option value="buy" {% if filters.side=='buy' %}selected{% endif %}>Buy</option>
-                <option value="sell" {% if filters.side=='sell' %}selected{% endif %}>Sell</option>
+                <option value="buy" {% if filters.side == 'buy' %}selected{% endif %}>Buy</option>
+                <option value="sell" {% if filters.side == 'sell' %}selected{% endif %}>Sell</option>
             </select>
         </div>
         <div class="form-group" style="min-width:120px; margin-bottom:0;">
             <label class="form-label">Status</label>
             <select name="status" class="form-select">
                 <option value="">All</option>
-                <option value="filled" {% if filters.status=='filled' %}selected{% endif %}>Filled</option>
-                <option value="submitted" {% if filters.status=='submitted' %}selected{% endif %}>Submitted</option>
-                <option value="rejected" {% if filters.status=='rejected' %}selected{% endif %}>Rejected</option>
-                <option value="error" {% if filters.status=='error' %}selected{% endif %}>Error</option>
+                <option value="filled" {% if filters.status == 'filled' %}selected{% endif %}>Filled</option>
+                <option value="submitted" {% if filters.status == 'submitted' %}selected{% endif %}>Submitted</option>
+                <option value="rejected" {% if filters.status == 'rejected' %}selected{% endif %}>Rejected</option>
+                <option value="error" {% if filters.status == 'error' %}selected{% endif %}>Error</option>
             </select>
         </div>
         <div class="form-group" style="min-width:140px; margin-bottom:0;">

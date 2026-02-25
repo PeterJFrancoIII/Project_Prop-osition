@@ -9,10 +9,12 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from apps.strategies.indicators import sma, ema, rsi, bollinger_bands, zscore, atr, macd, vwap
+from apps.strategies.indicators import sma, ema, rsi, bollinger_bands, zscore, atr, macd, vwap, roc
 from apps.strategies.base import Signal
 from apps.strategies.momentum_breakout import MomentumBreakout
 from apps.strategies.mean_reversion import MeanReversion
+from apps.strategies.sector_rotation import SectorRotation
+from apps.strategies.smart_dca import SmartDCA
 
 
 # ──────────────────────────────────────────────
@@ -137,6 +139,18 @@ class VWAPTests(TestCase):
         self.assertAlmostEqual(result[0], expected)
 
 
+class ROCTests(TestCase):
+    """Rate of Change correctness."""
+
+    def test_roc_calculation(self):
+        closes = [100.0, 100.0, 100.0, 105.0]
+        result = roc(closes, period=3)
+        self.assertEqual(result[0], 0.0)
+        self.assertEqual(result[1], 0.0)
+        self.assertEqual(result[2], 0.0)
+        self.assertEqual(result[3], 5.0)
+
+
 # ──────────────────────────────────────────────
 # Strategy Tests
 # ──────────────────────────────────────────────
@@ -220,3 +234,42 @@ class MeanReversionTests(TestCase):
         )
         self.assertEqual(signal.action, Signal.SELL)
         self.assertIn("Stop loss", signal.reason)
+
+
+class SectorRotationTests(TestCase):
+    """Sector Rotation strategy logic tests."""
+
+    def setUp(self):
+        self.strategy = SectorRotation()
+
+    def test_not_enough_data_holds(self):
+        bars = [{"open": 100, "high": 110, "low": 95, "close": 105, "volume": 1000} for _ in range(100)]
+        signal = self.strategy.generate_signal("AAPL", bars)
+        self.assertEqual(signal.action, Signal.HOLD)
+        self.assertIn("Not enough data", signal.reason)
+
+    def test_exit_on_trend_break(self):
+        bars = [{"open": 100, "high": 110, "low": 95, "close": 105, "volume": 1000} for _ in range(210)]
+        bars[-1]["close"] = 90  # Break SMA200 (which is 105)
+        # Entry 95 -> current 90 is a ~5% loss, which avoids the 8% stop loss trigger
+        signal = self.strategy.check_exit("AAPL", Decimal("95"), Decimal("90"), bars)
+        self.assertEqual(signal.action, Signal.SELL)
+        self.assertIn("Trend broken", signal.reason)
+
+
+class SmartDCATests(TestCase):
+    """Smart DCA strategy logic tests."""
+
+    def setUp(self):
+        self.strategy = SmartDCA()
+
+    def test_buy_on_dip(self):
+        bars = [{"open": 100, "high": 110, "low": 95, "close": 105, "volume": 1000} for _ in range(60)]
+        bars[-1]["close"] = 90  # Drop below SMA50
+        signal = self.strategy.generate_signal("AAPL", bars)
+        self.assertEqual(signal.action, Signal.BUY)
+        self.assertIn("Smart DCA Dip", signal.reason)
+
+    def test_never_exits(self):
+        signal = self.strategy.check_exit("AAPL", Decimal("100"), Decimal("150"), [])
+        self.assertEqual(signal.action, Signal.HOLD)

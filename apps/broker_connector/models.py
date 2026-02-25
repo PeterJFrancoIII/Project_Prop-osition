@@ -52,9 +52,9 @@ class BrokerAccount(models.Model):
     base_url = models.URLField(blank=True, default="https://paper-api.alpaca.markets")
 
     # Account info (updated on sync)
-    buying_power = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    equity = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    cash = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    buying_power = models.DecimalField(max_digits=15, decimal_places=2, default="0.00")
+    equity = models.DecimalField(max_digits=15, decimal_places=2, default="0.00")
+    cash = models.DecimalField(max_digits=15, decimal_places=2, default="0.00")
     last_synced_at = models.DateTimeField(null=True, blank=True)
 
     # Multi-tenant support (Layer 4+)

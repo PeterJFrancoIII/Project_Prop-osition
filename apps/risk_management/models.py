@@ -22,17 +22,17 @@ class RiskConfig(models.Model):
 
     # Drawdown limits
     max_daily_drawdown_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=5.00,
+        max_digits=5, decimal_places=2, default="5.00",
         help_text="Maximum daily loss as % of account equity"
     )
     max_total_drawdown_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=10.00,
+        max_digits=5, decimal_places=2, default="10.00",
         help_text="Maximum total drawdown as % of starting equity"
     )
 
     # Position limits
     max_position_size_pct = models.DecimalField(
-        max_digits=5, decimal_places=2, default=5.00,
+        max_digits=5, decimal_places=2, default="5.00",
         help_text="Maximum position size as % of account equity"
     )
     max_open_positions = models.IntegerField(
@@ -44,7 +44,7 @@ class RiskConfig(models.Model):
         default=50, help_text="Maximum trades per day (PDT awareness)"
     )
     daily_loss_limit = models.DecimalField(
-        max_digits=15, decimal_places=2, default=1000.00,
+        max_digits=15, decimal_places=2, default="1000.00",
         help_text="Maximum dollar loss per day before auto-stop"
     )
 

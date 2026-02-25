@@ -149,10 +149,11 @@ class RiskConfigUpdateTests(TestCase):
 
     def test_update_risk_params(self):
         response = self.client.post(reverse("dashboard:update-risk"), {
-            "max_daily_drawdown_pct": "3.5",
-            "max_position_size_pct": "5.0",
+            "max_daily_drawdown_pct": "3.50",
+            "max_position_size_pct": "5.00",
             "max_open_positions": "8",
             "max_daily_trades": "15",
+            "daily_loss_limit": "2000.00",
         })
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()

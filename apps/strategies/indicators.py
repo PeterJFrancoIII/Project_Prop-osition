@@ -219,3 +219,23 @@ def macd(
     histogram = [m - s for m, s in zip(macd_line, signal_line)]
 
     return macd_line, signal_line, histogram
+
+
+def roc(closes: list[float], period: int = 90) -> list[float]:
+    """
+    Rate of Change (ROC) — measures percentage change in price over a period.
+
+    ROC = ((Close - Close N periods ago) / Close N periods ago) * 100
+    """
+    result = []
+    for i in range(len(closes)):
+        if i < period:
+            result.append(0.0)
+        else:
+            past_close = closes[i - period]
+            if past_close == 0:
+                result.append(0.0)
+            else:
+                change = ((closes[i] - past_close) / past_close) * 100
+                result.append(change)
+    return result

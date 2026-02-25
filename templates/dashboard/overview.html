@@ -71,6 +71,108 @@
     </div>
 </div>
 
+<!-- Performance Analytics -->
+<div class="grid-2 mt-lg">
+    <!-- Performance by Strategy -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Performance by Strategy</span>
+            <a href="{% url 'dashboard:strategies' %}" class="btn btn-sm">Manage →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Strategy</th>
+                        <th>Status</th>
+                        <th>Today's Trades</th>
+                        <th>Win Rate</th>
+                        <th>Total P&L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for strategy in strategies %}
+                    <tr>
+                        <td>
+                            <strong>{{ strategy.name }}</strong>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">{{ strategy.get_asset_class_display
+                                }} | {{ strategy.get_timeframe_display }}</div>
+                        </td>
+                        <td>
+                            <label class="toggle">
+                                <input type="checkbox" {% if strategy.is_active %}checked{% endif %}
+                                    hx-post="{% url 'dashboard:toggle-strategy' strategy.id %}" hx-swap="none">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </td>
+                        <td>{{ strategy.trades_today }}</td>
+                        <td>{{ strategy.win_rate|floatformat:1 }}%</td>
+                        <td
+                            class="{% if strategy.total_pnl > 0 %}positive{% elif strategy.total_pnl < 0 %}negative{% else %}neutral{% endif %}">
+                            <strong>{% if strategy.total_pnl > 0 %}+{% endif %}${{ strategy.total_pnl|floatformat:2
+                                }}</strong>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center" style="padding: 2rem; color:var(--text-muted);">No
+                            strategies configured.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Performance by Account -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Performance by Account</span>
+            <a href="{% url 'dashboard:prop-firms' %}" class="btn btn-sm">Details →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Account Name</th>
+                        <th>Firm</th>
+                        <th>Phase</th>
+                        <th>Current Equity</th>
+                        <th>Total P&L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in accounts %}
+                    <tr>
+                        <td><strong>{{ account.name }}</strong></td>
+                        <td>{{ account.get_firm_display }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if account.phase == 'funded' %}badge-green
+                                {% elif account.phase == 'failed' %}badge-red
+                                {% else %}badge-blue{% endif %}">
+                                {{ account.get_phase_display|upper }}
+                            </span>
+                        </td>
+                        <td>${{ account.current_equity|floatformat:2 }}</td>
+                        <td
+                            class="{% if account.total_pnl > 0 %}positive{% elif account.total_pnl < 0 %}negative{% else %}neutral{% endif %}">
+                            <strong>{% if account.total_pnl > 0 %}+{% endif %}${{ account.total_pnl|floatformat:2
+                                }}</strong>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center" style="padding: 2rem; color:var(--text-muted);">No prop firm
+                            accounts active.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <!-- Active Strategies Summary -->
 <div class="card mt-lg">
     <div class="card-header">

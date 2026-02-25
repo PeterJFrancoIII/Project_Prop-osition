@@ -14,6 +14,8 @@ from django.core.management.base import BaseCommand
 from apps.market_data.models import OHLCVBar
 from apps.strategies.momentum_breakout import MomentumBreakout
 from apps.strategies.mean_reversion import MeanReversion
+from apps.strategies.sector_rotation import SectorRotation
+from apps.strategies.smart_dca import SmartDCA
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,8 @@ logger = logging.getLogger(__name__)
 STRATEGY_MAP = {
     "momentum_breakout": MomentumBreakout,
     "mean_reversion": MeanReversion,
+    "sector_rotation": SectorRotation,
+    "smart_dca": SmartDCA,
 }
 
 

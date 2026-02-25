@@ -87,16 +87,15 @@
                         <div class="form-group">
                             <label class="form-label">Model Type</label>
                             <select name="ai_model_type" class="form-select">
-                                <option value="none" {% if strategy.ai_model=='none' %}selected{% endif %}>None (Rules
-                                    Only)</option>
-                                <option value="sentiment" {% if strategy.ai_model=='sentiment' %}selected{% endif %}>
-                                    Sentiment NLP</option>
-                                <option value="regime" {% if strategy.ai_model=='regime' %}selected{% endif %}>Regime
+                                <option value="none" {% if strategy.ai_model == 'none' %}selected{% endif %}>None (Rules
+                                    Based)</option>
+                                <option value="sentiment" {% if strategy.ai_model == 'sentiment' %}selected{% endif %}>
+                                    News Sentiment (FinBERT)</option>
+                                <option value="regime" {% if strategy.ai_model == 'regime' %}selected{% endif %}>Regime
                                     Detection (HMM)</option>
-                                <option value="reinforcement" {% if strategy.ai_model=='reinforcement' %}selected{%
-                                    endif %}>Reinforcement Learning</option>
-                                <option value="ensemble" {% if strategy.ai_model=='ensemble' %}selected{% endif %}>
-                                    Ensemble (All Models)</option>
+                                <option value="reinforcement" {% if strategy.ai_model == 'reinforcement' %}selected{% endif %}>Reinforcement (PPO)</option>
+                                <option value="ensemble" {% if strategy.ai_model == 'ensemble' %}selected{% endif %}>
+                                    Ensemble (All)</option>
                             </select>
                         </div>
                         <div class="form-group">

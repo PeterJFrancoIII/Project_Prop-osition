@@ -50,11 +50,6 @@ class PropFirmAccount(models.Model):
         max_digits=15, decimal_places=2, default=50000,
         help_text="Starting account size ($)"
     )
-    current_equity = models.DecimalField(
-        max_digits=15, decimal_places=2, default=50000,
-        help_text="Current equity — updated on trade or sync"
-    )
-
     # Firm-Specific Limits
     max_daily_drawdown_pct = models.DecimalField(
         max_digits=5, decimal_places=2, default=5.00,
@@ -77,7 +72,6 @@ class PropFirmAccount(models.Model):
     )
 
     # Tracking
-    total_pnl = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     trading_days_completed = models.IntegerField(default=0)
     challenge_start_date = models.DateField(null=True, blank=True)
     challenge_end_date = models.DateField(null=True, blank=True)
@@ -108,10 +102,29 @@ class PropFirmAccount(models.Model):
         return self.account_size * (self.profit_target_pct / Decimal("100"))
 
     @property
+    def total_pnl(self) -> Decimal:
+        """Dynamic total realized P&L across all executed trades for this account."""
+        from apps.execution_engine.models import Trade
+        if not self.broker_account_id:
+            return Decimal("0.00")
+            
+        trades = Trade.objects.filter(broker_account_id=self.broker_account_id, status="filled")
+        total = Decimal("0.00")
+        for t in trades:
+            if t.realized_pnl is not None:
+                total += Decimal(str(t.realized_pnl))
+        return total
+
+    @property
+    def current_equity(self) -> Decimal:
+        """Current dynamic equity calculated from base account size + Trade realized P&L."""
+        return Decimal(str(self.account_size)) + self.total_pnl
+
+    @property
     def progress_pct(self) -> Decimal:
         """Progress toward profit target as a percentage (0-100+)."""
         target = self.profit_target_amount
-        if target == 0:
+        if target <= Decimal("0"):
             return Decimal("0")
         return (self.total_pnl / target) * Decimal("100")
 

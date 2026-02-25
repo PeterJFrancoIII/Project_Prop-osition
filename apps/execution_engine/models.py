@@ -53,8 +53,8 @@ class Trade(models.Model):
     cost_basis = models.DecimalField(max_digits=15, decimal_places=6, null=True, blank=True)
 
     # P&L tracking
-    realized_pnl = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    commission = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    realized_pnl = models.DecimalField(max_digits=15, decimal_places=2, default="0.00")
+    commission = models.DecimalField(max_digits=10, decimal_places=4, default="0.0000")
 
     # Source tracking
     strategy = models.CharField(max_length=100, db_index=True)
