@@ -1,0 +1,38 @@
+<div class="stat-card">
+    <div class="stat-label">Total P&L (Today)</div>
+    <div class="stat-value {% if total_pnl >= 0 %}positive{% else %}negative{% endif %}">
+        {% if total_pnl >= 0 %}+{% endif %}${{ total_pnl|floatformat:2 }}
+    </div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-label">Trades Today</div>
+    <div class="stat-value neutral">{{ trades_today }}</div>
+    <div class="stat-change">{{ trades_won }}W / {{ trades_lost }}L</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-label">Account Equity</div>
+    <div class="stat-value neutral">${{ account_equity|floatformat:2 }}</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-label">Active Strategies</div>
+    <div class="stat-value neutral">{{ active_strategies }}</div>
+    <div class="stat-change">of {{ total_strategies }} total</div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-label">Win Rate</div>
+    <div class="stat-value {% if win_rate >= 50 %}positive{% else %}negative{% endif %}">
+        {{ win_rate|floatformat:1 }}%
+    </div>
+</div>
+
+<div class="stat-card">
+    <div class="stat-label">Daily Drawdown</div>
+    <div class="stat-value {% if daily_drawdown <= 3 %}positive{% else %}negative{% endif %}">
+        {{ daily_drawdown|floatformat:2 }}%
+    </div>
+    <div class="stat-change">of {{ max_daily_drawdown }}% limit</div>
+</div>

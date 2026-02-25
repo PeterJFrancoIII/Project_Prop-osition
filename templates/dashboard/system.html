@@ -1,0 +1,158 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}System Health{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>System Health</h2>
+        <p class="subtitle">Monitor broker connections, webhook pipeline, and infrastructure</p>
+    </div>
+</div>
+
+<!-- Service Status Cards -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="stat-card">
+        <div class="stat-label">Django Server</div>
+        <div style="margin-top:var(--gap-sm);">
+            <span class="status-dot online"></span>
+            <span style="font-weight:600; color:var(--green);">Running</span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">MongoDB</div>
+        <div style="margin-top:var(--gap-sm);">
+            <span class="status-dot {% if mongo_connected %}online{% else %}offline{% endif %}"></span>
+            <span style="font-weight:600; color:{% if mongo_connected %}var(--green){% else %}var(--red){% endif %};">
+                {% if mongo_connected %}Connected{% else %}Disconnected{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Redis</div>
+        <div style="margin-top:var(--gap-sm);">
+            <span class="status-dot {% if redis_connected %}online{% else %}offline{% endif %}"></span>
+            <span style="font-weight:600; color:{% if redis_connected %}var(--green){% else %}var(--red){% endif %};">
+                {% if redis_connected %}Connected{% else %}Disconnected{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Alpaca API</div>
+        <div style="margin-top:var(--gap-sm);">
+            <span class="status-dot {% if alpaca_connected %}online{% else %}offline{% endif %}"></span>
+            <span style="font-weight:600; color:{% if alpaca_connected %}var(--green){% else %}var(--red){% endif %};">
+                {% if alpaca_connected %}Connected{% else %}Disconnected{% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <!-- Broker Accounts -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Broker Accounts</span>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Broker</th>
+                        <th>Mode</th>
+                        <th>Equity</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for account in broker_accounts %}
+                    <tr>
+                        <td style="font-weight:600;">{{ account.display_name }}</td>
+                        <td><span class="badge badge-blue">{{ account.broker_type }}</span></td>
+                        <td>
+                            <span
+                                class="badge {% if account.mode == 'paper' %}badge-yellow{% else %}badge-green{% endif %}">
+                                {{ account.mode|upper }}
+                            </span>
+                        </td>
+                        <td>${{ account.equity|floatformat:2 }}</td>
+                        <td>
+                            <span
+                                class="status-dot {% if account.status == 'active' %}online{% else %}offline{% endif %}"></span>
+                            {{ account.status }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">
+                            <div class="empty-state">
+                                <p>No broker accounts configured.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Webhook Pipeline Stats -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Webhook Pipeline (24h)</span>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="stat-card">
+                <div class="stat-label">Received</div>
+                <div class="stat-value neutral">{{ webhook_stats.received }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Dispatched</div>
+                <div class="stat-value positive">{{ webhook_stats.dispatched }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Rejected</div>
+                <div class="stat-value" style="color:var(--yellow);">{{ webhook_stats.rejected }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Errors</div>
+                <div class="stat-value negative">{{ webhook_stats.errors }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Info -->
+<div class="card mt-lg">
+    <div class="card-header">
+        <span class="card-title">System Information</span>
+    </div>
+    <div class="table-container">
+        <table>
+            <tbody>
+                <tr>
+                    <td style="font-weight:600; width:200px;">Django Version</td>
+                    <td>{{ django_version }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:600;">Python Version</td>
+                    <td>{{ python_version }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:600;">Settings Module</td>
+                    <td>{{ settings_module }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:600;">Time Zone</td>
+                    <td>{{ timezone }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:600;">Server Time</td>
+                    <td>{{ server_time }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

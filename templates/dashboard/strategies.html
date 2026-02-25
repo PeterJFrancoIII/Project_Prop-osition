@@ -1,0 +1,207 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Strategies & AI Models{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Strategies & AI Models</h2>
+        <p class="subtitle">Configure, enable, and monitor your trading algorithms and AI models</p>
+    </div>
+</div>
+
+<!-- Strategy Cards -->
+<div class="flex flex-col gap-md">
+    {% for strategy in strategies %}
+    <div class="strategy-card" id="strategy-{{ strategy.id }}">
+        <div class="strategy-header">
+            <div>
+                <div class="strategy-name">{{ strategy.name }}</div>
+                <p style="color:var(--text-muted); font-size:0.8rem; margin-top:4px;">{{ strategy.description }}</p>
+            </div>
+            <div class="flex gap-md" style="align-items:center;">
+                <span class="badge {% if strategy.is_active %}badge-green{% else %}badge-yellow{% endif %}">
+                    {% if strategy.is_active %}LIVE{% else %}PAUSED{% endif %}
+                </span>
+                <label class="toggle">
+                    <input type="checkbox" {% if strategy.is_active %}checked{% endif %}
+                        hx-post="{% url 'dashboard:toggle-strategy' strategy.id %}"
+                        hx-target="#strategy-{{ strategy.id }}" hx-swap="outerHTML">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Strategy Details Grid -->
+        <div class="grid-3" style="margin-top: var(--gap-sm);">
+            <div>
+                <div class="form-label">Asset Class</div>
+                <div style="font-family:var(--font-mono); font-weight:600;">{{ strategy.asset_class }}</div>
+            </div>
+            <div>
+                <div class="form-label">Timeframe</div>
+                <div style="font-family:var(--font-mono); font-weight:600;">{{ strategy.timeframe }}</div>
+            </div>
+            <div>
+                <div class="form-label">AI Model</div>
+                <div style="font-family:var(--font-mono); font-weight:600;">
+                    {% if strategy.ai_model %}
+                    <span class="badge badge-purple">{{ strategy.ai_model }}</span>
+                    {% else %}
+                    <span class="badge badge-yellow">Rules-Based</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Editable Parameters -->
+        <details style="margin-top: var(--gap-sm);">
+            <summary style="cursor:pointer; color:var(--blue); font-size:0.85rem; font-weight:600;">
+                ⚙️ Edit Parameters
+            </summary>
+            <form hx-post="{% url 'dashboard:update-strategy' strategy.id %}" hx-target="#strategy-{{ strategy.id }}"
+                hx-swap="outerHTML" style="margin-top: var(--gap-md);">
+                {% csrf_token %}
+                <div class="grid-3">
+                    <div class="form-group">
+                        <label class="form-label">Position Size (%)</label>
+                        <input type="number" step="0.1" name="position_size_pct"
+                            value="{{ strategy.position_size_pct }}" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Max Positions</label>
+                        <input type="number" name="max_positions" value="{{ strategy.max_positions }}"
+                            class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Stop Loss (%)</label>
+                        <input type="number" step="0.1" name="stop_loss_pct" value="{{ strategy.stop_loss_pct }}"
+                            class="form-input">
+                    </div>
+                </div>
+
+                {% if strategy.ai_model %}
+                <div class="card" style="background:var(--bg-primary); margin-top:var(--gap-sm);">
+                    <div class="card-title" style="margin-bottom:var(--gap-sm);">🧠 AI Model Configuration</div>
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label class="form-label">Model Type</label>
+                            <select name="ai_model_type" class="form-select">
+                                <option value="none" {% if strategy.ai_model=='none' %}selected{% endif %}>None (Rules
+                                    Only)</option>
+                                <option value="sentiment" {% if strategy.ai_model=='sentiment' %}selected{% endif %}>
+                                    Sentiment NLP</option>
+                                <option value="regime" {% if strategy.ai_model=='regime' %}selected{% endif %}>Regime
+                                    Detection (HMM)</option>
+                                <option value="reinforcement" {% if strategy.ai_model=='reinforcement' %}selected{%
+                                    endif %}>Reinforcement Learning</option>
+                                <option value="ensemble" {% if strategy.ai_model=='ensemble' %}selected{% endif %}>
+                                    Ensemble (All Models)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Confidence Threshold</label>
+                            <input type="number" step="0.05" name="ai_confidence_threshold"
+                                value="{{ strategy.ai_confidence_threshold|default:'0.7' }}" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Retrain Frequency</label>
+                            <select name="ai_retrain_freq" class="form-select">
+                                <option value="daily">Daily</option>
+                                <option value="weekly" selected>Weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="manual">Manual Only</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div style="margin-top:var(--gap-md); display:flex; gap:var(--gap-sm);">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" class="btn" onclick="this.closest('details').open=false;">Cancel</button>
+                </div>
+            </form>
+        </details>
+
+        <!-- Strategy Performance (mini stats) -->
+        <div class="flex gap-lg"
+            style="margin-top:var(--gap-sm); padding-top:var(--gap-sm); border-top:1px solid var(--border);">
+            <div style="font-size:0.75rem;">
+                <span style="color:var(--text-muted);">Trades Today:</span>
+                <strong>{{ strategy.trades_today|default:"0" }}</strong>
+            </div>
+            <div style="font-size:0.75rem;">
+                <span style="color:var(--text-muted);">P&L Today:</span>
+                <strong style="color:{% if strategy.pnl_today >= 0 %}var(--green){% else %}var(--red){% endif %};">
+                    {% if strategy.pnl_today >= 0 %}+{% endif %}${{ strategy.pnl_today|default:"0.00" }}
+                </strong>
+            </div>
+            <div style="font-size:0.75rem;">
+                <span style="color:var(--text-muted);">Win Rate:</span>
+                <strong>{{ strategy.win_rate|default:"—" }}</strong>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card">
+        <div class="empty-state">
+            <div class="icon">🤖</div>
+            <p>No strategies configured yet.</p>
+            <p style="margin-top:8px; font-size:0.75rem;">Strategies will appear here once you deploy your first
+                algorithm in Layer 1.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- AI Models Overview -->
+<div class="card mt-lg">
+    <div class="card-header">
+        <span class="card-title">🧠 AI Models Registry</span>
+    </div>
+    <div class="table-container" style="margin-top:var(--gap-sm);">
+        <table>
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Type</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th>Last Trained</th>
+                    <th>Used By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in ai_models %}
+                <tr>
+                    <td style="font-weight:600;">{{ model.name }}</td>
+                    <td><span class="badge badge-purple">{{ model.model_type }}</span></td>
+                    <td>v{{ model.version }}</td>
+                    <td>
+                        <span
+                            class="badge {% if model.status == 'active' %}badge-green{% else %}badge-yellow{% endif %}">
+                            {{ model.status }}
+                        </span>
+                    </td>
+                    <td>{{ model.last_trained|default:"Never" }}</td>
+                    <td>{{ model.strategies_count }} strategies</td>
+                    <td>
+                        <button class="btn btn-sm">Retrain</button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <p>AI models will be available in Layer 3.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

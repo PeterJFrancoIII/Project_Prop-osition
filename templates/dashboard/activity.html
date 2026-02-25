@@ -1,0 +1,87 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Activity Log{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Activity Log</h2>
+        <p class="subtitle">Full audit trail of webhook events and system actions</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Webhook ID</th>
+                    <th>Time</th>
+                    <th>Source</th>
+                    <th>Ticker</th>
+                    <th>Action</th>
+                    <th>Strategy</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr>
+                    <td style="font-size:0.7rem; color:var(--text-muted);">{{ event.webhook_id }}</td>
+                    <td>{{ event.created_at|date:"m/d H:i:s" }}</td>
+                    <td><span class="badge badge-blue">{{ event.source }}</span></td>
+                    <td style="font-weight:600;">{{ event.ticker|default:"—" }}</td>
+                    <td>
+                        {% if event.action %}
+                        <span class="badge {% if event.action == 'buy' %}badge-green{% else %}badge-red{% endif %}">
+                            {{ event.action|upper }}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ event.strategy|default:"—" }}</td>
+                    <td>
+                        <span class="badge
+                            {% if event.status == 'dispatched' %}badge-green
+                            {% elif event.status == 'validated' %}badge-blue
+                            {% elif event.status == 'rejected' %}badge-red
+                            {% elif event.status == 'error' %}badge-red
+                            {% else %}badge-yellow{% endif %}">
+                            {{ event.status }}
+                        </span>
+                    </td>
+                    <td
+                        style="font-size:0.7rem; color:var(--red); max-width:200px; overflow:hidden; text-overflow:ellipsis;">
+                        {{ event.error_message|truncatechars:50|default:"—" }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="icon">📡</div>
+                            <p>No webhook events recorded yet.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if events.has_other_pages %}
+    <div
+        style="display:flex; justify-content:center; gap:var(--gap-sm); padding:var(--gap-md); border-top:1px solid var(--border);">
+        {% if events.has_previous %}
+        <a href="?page={{ events.previous_page_number }}" class="btn btn-sm">← Prev</a>
+        {% endif %}
+        <span style="padding:0.3rem 0.7rem; font-size:0.8rem; color:var(--text-muted);">
+            Page {{ events.number }} of {{ events.paginator.num_pages }}
+        </span>
+        {% if events.has_next %}
+        <a href="?page={{ events.next_page_number }}" class="btn btn-sm">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

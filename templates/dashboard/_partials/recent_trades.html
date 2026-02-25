@@ -1,0 +1,32 @@
+{% for trade in recent_trades %}
+<tr>
+    <td>{{ trade.created_at|date:"H:i:s" }}</td>
+    <td style="font-weight:600;">{{ trade.symbol }}</td>
+    <td>
+        <span class="badge {% if trade.side == 'buy' %}badge-green{% else %}badge-red{% endif %}">
+            {{ trade.side|upper }}
+        </span>
+    </td>
+    <td>{{ trade.quantity }}</td>
+    <td>{{ trade.fill_price|default:"—" }}</td>
+    <td>
+        <span class="badge
+            {% if trade.status == 'filled' %}badge-green
+            {% elif trade.status == 'submitted' %}badge-blue
+            {% elif trade.status == 'rejected' %}badge-red
+            {% elif trade.status == 'error' %}badge-red
+            {% else %}badge-yellow{% endif %}">
+            {{ trade.status }}
+        </span>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="6">
+        <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>No trades yet. Send a webhook to get started.</p>
+        </div>
+    </td>
+</tr>
+{% endfor %}

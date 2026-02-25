@@ -1,0 +1,23 @@
+{% for event in recent_events %}
+<div class="activity-item">
+    <span class="activity-time">{{ event.created_at|date:"H:i" }}</span>
+    {% if event.status == 'dispatched' %}
+    <span class="badge badge-green">EXEC</span>
+    {% elif event.status == 'rejected' %}
+    <span class="badge badge-red">REJECT</span>
+    {% elif event.status == 'error' %}
+    <span class="badge badge-red">ERROR</span>
+    {% else %}
+    <span class="badge badge-blue">RECV</span>
+    {% endif %}
+    <span>
+        <strong>{{ event.ticker }}</strong>
+        {{ event.action }} via {{ event.strategy|default:"—" }}
+    </span>
+</div>
+{% empty %}
+<div class="empty-state">
+    <div class="icon">📡</div>
+    <p>Waiting for webhook signals...</p>
+</div>
+{% endfor %}

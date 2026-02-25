@@ -245,6 +245,80 @@ Each new app must include a `MODULE.md` in its directory containing:
 
 ---
 
+## 🗄️ Data Governance
+
+> **Principle:** Every byte of data in this system must be accounted for — who created it, when, why, and how long we keep it. Trading data is financial evidence; treat it as such.
+
+### Data Classification
+
+| Classification | Examples | Retention | Access |
+|----------------|----------|-----------|--------|
+| **Critical** | Trade records, order fills, P&L, cost basis | **Indefinite** (regulatory: 5+ years) | Admin only, read-only after creation |
+| **Sensitive** | API keys, broker credentials, user auth tokens | Encrypted at rest, rotated quarterly | System only, never logged in plaintext |
+| **Operational** | Webhook events, signals, risk check logs | **2 years** minimum | Admin + system |
+| **Analytical** | OHLCV data, backtest results, performance metrics | **1 year** minimum, archivable | All authenticated users (scoped) |
+| **Transient** | Cache entries, session data, rate limit counters | TTL-based (minutes to hours) | System only |
+
+### Immutability Rules
+1. **Trade records are append-only.** Once a `Trade` is created, its core fields (`symbol`, `side`, `quantity`, `fill_price`, `timestamp`) are NEVER modified. Corrections create new adjustment records.
+2. **Webhook events are immutable.** The raw `payload` field is never altered after creation. Status updates are the only mutable field.
+3. **Risk check decisions are logged permanently.** Every `check_trade()` result (approved or rejected, with reason) is stored — no silent drops.
+
+### Access Control
+1. **Principle of least privilege.** Each Django app accesses only its own models. Cross-app access goes through service functions, never direct ORM queries.
+2. **All queries are scoped.** In multi-tenant mode (Layer 4+), every query MUST filter by `organization_id`. No global queries on tenant data.
+3. **API keys are never returned in API responses.** Broker credentials are write-only via API; reads return only masked values (e.g., `****ABCD`).
+
+### PII & Secrets Handling
+1. **No PII in logs.** Logger output must never contain API keys, passwords, email addresses, or account numbers.
+2. **Secrets rotate on schedule.** `ENCRYPTION_KEY`, webhook tokens, and broker API keys should be rotatable without downtime (support key versioning).
+3. **All secrets flow through env vars → settings.** No hardcoded secrets anywhere in the codebase. `.env` is gitignored.
+
+### Backup & Recovery
+1. **MongoDB backups** — automated daily snapshots in production (mongodump or cloud provider snapshots).
+2. **Point-in-time recovery** — enable MongoDB oplog for replay capability.
+3. **Backup verification** — monthly restore test to a staging environment.
+
+---
+
+## 🌱 Scalability & Growth Rules
+
+> **Principle:** The codebase must stay tight and navigable as it grows from Layer 0 to Layer 5. Every new feature must earn its place.
+
+### Layer-Gated Development
+1. **Never skip a layer.** No Layer 3 (AI) code until Layer 2 (Multi-Strategy) exit criteria are met.
+2. **Each layer has exit criteria** defined in `SCALABLE_BUILD_PLAN.md`. Mark them `[x]` before advancing.
+3. **Stub, don't build ahead.** If a future layer needs a model or interface, create the stub (empty class, pass-through function) in the current layer. Do NOT implement logic ahead of schedule.
+
+### Code Growth Rules
+1. **Max 300 lines per Python file.** If a file exceeds this, decompose into sub-modules. Exception: test files.
+2. **Max 5 Django apps per layer.** If you need more, refactor existing apps to absorb new responsibility or create a sub-module within an existing app.
+3. **Every public function has a docstring.** No exceptions. The docstring must explain what it does, not just repeat the function name.
+4. **No dead code.** Commented-out code blocks must be removed. Use git history for recovery.
+
+### Configuration-Driven Architecture
+1. **Trading parameters live in the database**, not in code. Position size, drawdown limits, strategy params — all configurable per account.
+2. **Feature flags for new capabilities.** New strategies, new broker connectors, and new risk rules are gated behind feature flags until validated.
+3. **Environment parity.** `docker-compose up` must produce a working system identical to production (minus secrets). No "works on my machine" gaps.
+
+### Dependency Management
+1. **Pin major versions** in `requirements.txt` (e.g., `django>=5.0,<6.0`).
+2. **Audit dependencies quarterly.** Run `pip audit` and resolve known vulnerabilities.
+3. **No new dependencies without justification.** Adding a library requires a one-line comment in `requirements.txt` explaining why.
+
+### Performance Budgets
+1. **Webhook → trade execution: < 500ms** (excluding broker API latency).
+2. **API response time: < 200ms** for read endpoints (p95).
+3. **Backtest throughput: 1 year of daily bars in < 5 seconds** per strategy.
+4. **Monitor and alert** if budgets are exceeded in production (Layer 2+).
+
+### Deprecation Protocol
+1. **Announce deprecation** in `CHANGELOG.md` at least 1 layer before removal.
+2. **Log warnings** when deprecated code paths are used.
+3. **Remove deprecated code** in the layer following announcement. No carrying dead weight.
+
+---
+
 ## 📝 Rules Change Log (Append-Only — Never Delete)
 
 | Date | Change | Reason | Layer |
@@ -262,3 +336,9 @@ Each new app must include a `MODULE.md` in its directory containing:
 | 2026-02-20 | Renamed exchange_connector to broker_connector | Reflects stocks-first priority — brokers, not just crypto exchanges | 0 |
 | 2026-02-20 | Added market_data app to structure | Dedicated app for stock data pipelines, fundamentals, OHLCV | 0 |
 | 2026-02-20 | Added GitHub repo to SSOT | Private repo: PeterJFrancoIII/Project_Prop-osition | 0 |
+| 2026-02-25 | Added Data Governance section | Financial data requires strict retention, immutability, access control, and PII handling | 0 |
+| 2026-02-25 | Added Scalability & Growth Rules | Layer-gated development, code growth limits, config-driven architecture, performance budgets, deprecation protocol | 0 |
+| 2026-02-25 | Fixed HTMX partial views | Partial endpoints were re-rendering full pages causing broken UI; created _partials/ fragment templates, used {% include %} for parity | 0 |
+| 2026-02-25 | Added equity curve chart | Chart.js line chart on overview page, JSON API endpoint at /api/equity-data/, 60s auto-refresh, gradient fill | 0 |
+| 2026-02-25 | Added accounts page | Broker accounts view at /accounts/, sidebar nav link, security notice card; full CRUD deferred to Layer 1 | 0 |
+| 2026-02-25 | Added dashboard tests | test_dashboard.py with 12 tests: page views, HTMX fragment correctness, kill switch, strategy toggle, risk config update | 0 |

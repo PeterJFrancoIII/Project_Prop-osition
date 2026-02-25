@@ -1,0 +1,134 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Trade History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Trade History</h2>
+        <p class="subtitle">Complete audit trail of every trade executed by the system</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-md">
+    <form method="get" class="flex gap-md" style="align-items:flex-end; flex-wrap:wrap;">
+        <div class="form-group" style="min-width:120px; margin-bottom:0;">
+            <label class="form-label">Symbol</label>
+            <input type="text" name="symbol" value="{{ filters.symbol }}" placeholder="e.g. AAPL" class="form-input">
+        </div>
+        <div class="form-group" style="min-width:100px; margin-bottom:0;">
+            <label class="form-label">Side</label>
+            <select name="side" class="form-select">
+                <option value="">All</option>
+                <option value="buy" {% if filters.side=='buy' %}selected{% endif %}>Buy</option>
+                <option value="sell" {% if filters.side=='sell' %}selected{% endif %}>Sell</option>
+            </select>
+        </div>
+        <div class="form-group" style="min-width:120px; margin-bottom:0;">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select">
+                <option value="">All</option>
+                <option value="filled" {% if filters.status=='filled' %}selected{% endif %}>Filled</option>
+                <option value="submitted" {% if filters.status=='submitted' %}selected{% endif %}>Submitted</option>
+                <option value="rejected" {% if filters.status=='rejected' %}selected{% endif %}>Rejected</option>
+                <option value="error" {% if filters.status=='error' %}selected{% endif %}>Error</option>
+            </select>
+        </div>
+        <div class="form-group" style="min-width:140px; margin-bottom:0;">
+            <label class="form-label">Strategy</label>
+            <input type="text" name="strategy" value="{{ filters.strategy }}" placeholder="e.g. momentum"
+                class="form-input">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-bottom:0;">Filter</button>
+        <a href="{% url 'dashboard:trades' %}" class="btn" style="margin-bottom:0;">Clear</a>
+    </form>
+</div>
+
+<!-- Trades Table -->
+<div class="card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Trade ID</th>
+                    <th>Time</th>
+                    <th>Symbol</th>
+                    <th>Side</th>
+                    <th>Qty</th>
+                    <th>Req. Price</th>
+                    <th>Fill Price</th>
+                    <th>P&L</th>
+                    <th>Strategy</th>
+                    <th>Risk</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trade in trades %}
+                <tr>
+                    <td style="font-size:0.7rem; color:var(--text-muted);">{{ trade.trade_id }}</td>
+                    <td>{{ trade.created_at|date:"m/d H:i:s" }}</td>
+                    <td style="font-weight:600;">{{ trade.symbol }}</td>
+                    <td>
+                        <span class="badge {% if trade.side == 'buy' %}badge-green{% else %}badge-red{% endif %}">
+                            {{ trade.side|upper }}
+                        </span>
+                    </td>
+                    <td>{{ trade.quantity }}</td>
+                    <td>{{ trade.requested_price|default:"MKT" }}</td>
+                    <td>{{ trade.fill_price|default:"—" }}</td>
+                    <td style="color:{% if trade.realized_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
+                        {% if trade.realized_pnl %}
+                        {% if trade.realized_pnl >= 0 %}+{% endif %}${{ trade.realized_pnl|floatformat:2 }}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td><span class="badge badge-blue">{{ trade.strategy }}</span></td>
+                    <td>
+                        {% if trade.risk_approved %}
+                        <span class="badge badge-green">✓</span>
+                        {% else %}
+                        <span class="badge badge-red">✗</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge
+                            {% if trade.status == 'filled' %}badge-green
+                            {% elif trade.status == 'submitted' %}badge-blue
+                            {% elif trade.status == 'rejected' or trade.status == 'error' %}badge-red
+                            {% else %}badge-yellow{% endif %}">
+                            {{ trade.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11">
+                        <div class="empty-state">
+                            <div class="icon">📊</div>
+                            <p>No trades match your filters.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if trades.has_other_pages %}
+    <div
+        style="display:flex; justify-content:center; gap:var(--gap-sm); padding:var(--gap-md); border-top:1px solid var(--border);">
+        {% if trades.has_previous %}
+        <a href="?page={{ trades.previous_page_number }}" class="btn btn-sm">← Prev</a>
+        {% endif %}
+        <span style="padding:0.3rem 0.7rem; font-size:0.8rem; color:var(--text-muted);">
+            Page {{ trades.number }} of {{ trades.paginator.num_pages }}
+        </span>
+        {% if trades.has_next %}
+        <a href="?page={{ trades.next_page_number }}" class="btn btn-sm">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

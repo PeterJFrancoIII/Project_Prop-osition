@@ -1,0 +1,213 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>System Overview</h2>
+        <p class="subtitle">Real-time snapshot of your trading operation</p>
+    </div>
+    <div class="flex gap-md">
+        <span class="badge badge-{% if system_status == 'online' %}green{% else %}red{% endif %}">
+            <span class="status-dot {% if system_status == 'online' %}online{% else %}offline{% endif %}"></span>
+            {{ system_status|upper }}
+        </span>
+    </div>
+</div>
+
+<!-- Key Metrics -->
+<div class="stats-grid" hx-get="{% url 'dashboard:overview-stats' %}" hx-trigger="every 10s" hx-swap="innerHTML">
+    {% include "dashboard/_partials/stats_grid.html" %}
+</div>
+
+<!-- Equity Curve Chart -->
+<div class="card mb-md">
+    <div class="card-header">
+        <span class="card-title">📈 Equity Curve (Cumulative P&L)</span>
+    </div>
+    <div style="position:relative; height:280px;">
+        <canvas id="equity-curve"></canvas>
+    </div>
+</div>
+
+<!-- Two-column: Recent Trades + Activity Feed -->
+<div class="grid-2">
+    <!-- Recent Trades -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Trades</span>
+            <a href="{% url 'dashboard:trades' %}" class="btn btn-sm">View All →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody hx-get="{% url 'dashboard:recent-trades' %}" hx-trigger="every 10s" hx-swap="innerHTML">
+                    {% include "dashboard/_partials/recent_trades.html" %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Activity Feed</span>
+            <a href="{% url 'dashboard:activity' %}" class="btn btn-sm">View All →</a>
+        </div>
+        <div class="activity-feed" hx-get="{% url 'dashboard:recent-activity' %}" hx-trigger="every 10s"
+            hx-swap="innerHTML">
+            {% include "dashboard/_partials/recent_activity.html" %}
+        </div>
+    </div>
+</div>
+
+<!-- Active Strategies Summary -->
+<div class="card mt-lg">
+    <div class="card-header">
+        <span class="card-title">Active Strategies</span>
+        <a href="{% url 'dashboard:strategies' %}" class="btn btn-sm btn-primary">Manage Strategies →</a>
+    </div>
+    {% for strategy in strategies %}
+    <div class="strategy-card mt-md">
+        <div class="strategy-header">
+            <div>
+                <div class="strategy-name">{{ strategy.name }}</div>
+                <span class="badge {% if strategy.is_active %}badge-green{% else %}badge-yellow{% endif %}"
+                    style="margin-top:4px;">
+                    {% if strategy.is_active %}ACTIVE{% else %}PAUSED{% endif %}
+                </span>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" {% if strategy.is_active %}checked{% endif %}
+                    hx-post="{% url 'dashboard:toggle-strategy' strategy.id %}" hx-swap="none">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="strategy-meta flex gap-lg">
+            <dl>
+                <dt>Asset Class</dt>
+                <dd>{{ strategy.asset_class }}</dd>
+            </dl>
+            <dl>
+                <dt>Timeframe</dt>
+                <dd>{{ strategy.timeframe }}</dd>
+            </dl>
+            <dl>
+                <dt>AI Model</dt>
+                <dd>{{ strategy.ai_model|default:"None" }}</dd>
+            </dl>
+            <dl>
+                <dt>Trades Today</dt>
+                <dd>{{ strategy.trades_today|default:"0" }}</dd>
+            </dl>
+        </div>
+    </div>
+    {% empty %}
+    <div class="empty-state mt-md">
+        <div class="icon">🤖</div>
+        <p>No strategies configured yet. <a href="{% url 'dashboard:strategies' %}">Add your first strategy →</a></p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const ctx = document.getElementById('equity-curve');
+        if (!ctx) return;
+
+        let chart = null;
+
+        function loadChart() {
+            fetch('{% url "dashboard:equity-data" %}')
+                .then(r => r.json())
+                .then(data => {
+                    if (chart) chart.destroy();
+
+                    if (!data.labels.length) {
+                        ctx.parentElement.innerHTML = '<div class="empty-state"><div class="icon">📈</div><p>No trade data yet. Chart will populate as trades are executed.</p></div>';
+                        return;
+                    }
+
+                    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 280);
+                    const isPositive = data.data[data.data.length - 1] >= 0;
+                    if (isPositive) {
+                        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.3)');
+                        gradient.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
+                    } else {
+                        gradient.addColorStop(0, 'rgba(239, 68, 68, 0.3)');
+                        gradient.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
+                    }
+
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.labels,
+                            datasets: [{
+                                label: 'Cumulative P&L ($)',
+                                data: data.data,
+                                borderColor: isPositive ? '#22c55e' : '#ef4444',
+                                backgroundColor: gradient,
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 0,
+                                pointHoverRadius: 5,
+                                pointHoverBackgroundColor: isPositive ? '#22c55e' : '#ef4444',
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    backgroundColor: '#1a1f2e',
+                                    borderColor: '#2a3040',
+                                    borderWidth: 1,
+                                    titleFont: { family: "'Inter', sans-serif", size: 12 },
+                                    bodyFont: { family: "'JetBrains Mono', monospace", size: 13 },
+                                    callbacks: {
+                                        label: function (ctx) {
+                                            return (ctx.raw >= 0 ? '+' : '') + '$' + ctx.raw.toFixed(2);
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: { color: 'rgba(42, 48, 64, 0.5)' },
+                                    ticks: { color: '#6b7280', font: { size: 10 } }
+                                },
+                                y: {
+                                    grid: { color: 'rgba(42, 48, 64, 0.5)' },
+                                    ticks: {
+                                        color: '#6b7280',
+                                        font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                        callback: function (v) { return '$' + v.toLocaleString(); }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                })
+                .catch(err => console.warn('Equity chart load failed:', err));
+        }
+
+        loadChart();
+        setInterval(loadChart, 60000);
+    })();
+</script>
+{% endblock %}

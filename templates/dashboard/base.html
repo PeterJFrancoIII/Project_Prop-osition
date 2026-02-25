@@ -1,0 +1,99 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} — Prop Trader</title>
+    <meta name="description" content="Proprietary Accounts Auto-Trader Dashboard">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    {% block extra_css %}{% endblock %}
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <h1>⚡ Prop Trader</h1>
+                <span class="version">v0.1</span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <span class="nav-section-label">Monitoring</span>
+                <a href="{% url 'dashboard:overview' %}"
+                    class="nav-link {% if active_page == 'overview' %}active{% endif %}">
+                    <span class="icon">📊</span> Overview
+                </a>
+                <a href="{% url 'dashboard:trades' %}"
+                    class="nav-link {% if active_page == 'trades' %}active{% endif %}">
+                    <span class="icon">📈</span> Trade History
+                </a>
+                <a href="{% url 'dashboard:activity' %}"
+                    class="nav-link {% if active_page == 'activity' %}active{% endif %}">
+                    <span class="icon">🔔</span> Activity Log
+                </a>
+
+                <span class="nav-section-label">Strategy & AI</span>
+                <a href="{% url 'dashboard:strategies' %}"
+                    class="nav-link {% if active_page == 'strategies' %}active{% endif %}">
+                    <span class="icon">🤖</span> Strategies & Models
+                </a>
+
+                <span class="nav-section-label">Configuration</span>
+                <a href="{% url 'dashboard:risk' %}" class="nav-link {% if active_page == 'risk' %}active{% endif %}">
+                    <span class="icon">🛡️</span> Risk Management
+                </a>
+                <a href="{% url 'dashboard:system' %}"
+                    class="nav-link {% if active_page == 'system' %}active{% endif %}">
+                    <span class="icon">⚙️</span> System Health
+                </a>
+                <a href="{% url 'dashboard:accounts' %}"
+                    class="nav-link {% if active_page == 'accounts' %}active{% endif %}">
+                    <span class="icon">🏦</span> Accounts
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="kill-switch-btn" hx-post="{% url 'dashboard:kill-switch' %}"
+                    hx-confirm="⚠️ EMERGENCY KILL SWITCH: This will cancel ALL open orders and halt ALL trading. Are you sure?"
+                    hx-target="#kill-switch-status" hx-swap="innerHTML">
+                    🚨 KILL SWITCH
+                </button>
+                <div id="kill-switch-status"
+                    style="text-align:center; margin-top:8px; font-size:0.75rem; color:var(--text-muted);">
+                    {% if kill_switch_active %}
+                    <span style="color:var(--red);">⛔ TRADING HALTED</span>
+                    {% else %}
+                    <span style="color:var(--green);">✅ Trading Active</span>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>

@@ -1,0 +1,79 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Accounts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Broker Accounts</h2>
+        <p class="subtitle">Manage exchange and broker API connections</p>
+    </div>
+    <a href="/admin/broker_connector/brokeraccount/add/" class="btn btn-primary" target="_blank">
+        + Add Account
+    </a>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Account Name</th>
+                    <th>Broker</th>
+                    <th>Mode</th>
+                    <th>Equity</th>
+                    <th>Status</th>
+                    <th>Connected Since</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in broker_accounts %}
+                <tr>
+                    <td style="font-weight:600;">{{ account.display_name }}</td>
+                    <td><span class="badge badge-blue">{{ account.broker_type|upper }}</span></td>
+                    <td>
+                        <span
+                            class="badge {% if account.mode == 'paper' %}badge-yellow{% else %}badge-green{% endif %}">
+                            {{ account.mode|upper }}
+                        </span>
+                    </td>
+                    <td style="font-family:var(--font-mono);">${{ account.equity|floatformat:2 }}</td>
+                    <td>
+                        <span
+                            class="status-dot {% if account.status == 'active' %}online{% else %}offline{% endif %}"></span>
+                        {{ account.status|title }}
+                    </td>
+                    <td style="color:var(--text-muted);">{{ account.created_at|date:"M d, Y" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <div class="icon">🏦</div>
+                            <p>No broker accounts configured yet.</p>
+                            <p style="margin-top:8px; font-size:0.75rem;">
+                                Add your first Alpaca account to start paper trading.
+                                <a href="/admin/broker_connector/brokeraccount/add/" target="_blank">Add via Admin →</a>
+                            </p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Account Security Notice -->
+<div class="card mt-lg" style="border-color: var(--yellow); border-width: 1px;">
+    <div class="card-header">
+        <span class="card-title">🔒 Security</span>
+    </div>
+    <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.7;">
+        <p>• API keys are encrypted at rest using Fernet encryption</p>
+        <p>• Only <strong>trade-only</strong> permissions are used — no withdrawal access</p>
+        <p>• IP whitelisting is enabled where supported by the broker</p>
+        <p>• Full account management will be available in <strong>Layer 1</strong></p>
+    </div>
+</div>
+{% endblock %}

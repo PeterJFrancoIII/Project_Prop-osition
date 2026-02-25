@@ -1,0 +1,141 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Risk Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>Risk Management</h2>
+        <p class="subtitle">Configure safety limits and monitor risk exposure</p>
+    </div>
+</div>
+
+<!-- Kill Switch Status Banner -->
+{% if risk_config.kill_switch_active %}
+<div
+    style="background:var(--red-bg); border:2px solid var(--red); border-radius:var(--radius-lg); padding:var(--gap-lg); margin-bottom:var(--gap-xl); text-align:center;">
+    <div style="font-size:1.5rem;">🚨</div>
+    <div style="font-size:1.1rem; font-weight:700; color:var(--red); margin-top:var(--gap-sm);">KILL SWITCH ACTIVE — ALL
+        TRADING HALTED</div>
+    <button class="btn btn-success mt-md" hx-post="{% url 'dashboard:kill-switch' %}" hx-target="body"
+        hx-confirm="Resume trading? Make sure all issues are resolved.">
+        ✅ Resume Trading
+    </button>
+</div>
+{% endif %}
+
+<!-- Risk Parameters -->
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Risk Parameters</span>
+        </div>
+        <form hx-post="{% url 'dashboard:update-risk' %}" hx-target="this" hx-swap="outerHTML">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label">Max Daily Drawdown (%)</label>
+                <input type="number" step="0.5" name="max_daily_drawdown_pct"
+                    value="{{ risk_config.max_daily_drawdown_pct }}" class="form-input">
+                <small style="color:var(--text-muted); font-size:0.7rem;">Trading stops if daily loss exceeds this % of
+                    equity</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Total Drawdown (%)</label>
+                <input type="number" step="0.5" name="max_total_drawdown_pct"
+                    value="{{ risk_config.max_total_drawdown_pct }}" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Position Size (% of equity)</label>
+                <input type="number" step="0.5" name="max_position_size_pct"
+                    value="{{ risk_config.max_position_size_pct }}" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Open Positions</label>
+                <input type="number" name="max_open_positions" value="{{ risk_config.max_open_positions }}"
+                    class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Max Daily Trades</label>
+                <input type="number" name="max_daily_trades" value="{{ risk_config.max_daily_trades }}"
+                    class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Daily Dollar Loss Limit ($)</label>
+                <input type="number" step="100" name="daily_loss_limit" value="{{ risk_config.daily_loss_limit }}"
+                    class="form-input">
+            </div>
+            <button type="submit" class="btn btn-primary">Save Risk Parameters</button>
+        </form>
+    </div>
+
+    <!-- Live Risk Status -->
+    <div class="flex flex-col gap-md">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Current Risk Exposure</span>
+            </div>
+            <div class="stats-grid" style="grid-template-columns: 1fr 1fr;">
+                <div class="stat-card">
+                    <div class="stat-label">Daily P&L</div>
+                    <div class="stat-value {% if daily_pnl >= 0 %}positive{% else %}negative{% endif %}">
+                        {% if daily_pnl >= 0 %}+{% endif %}${{ daily_pnl|floatformat:2 }}
+                    </div>
+                    <div class="stat-change" style="color:var(--text-muted);">
+                        Limit: ${{ risk_config.daily_loss_limit|floatformat:0 }}
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Daily Drawdown</div>
+                    <div class="stat-value {% if daily_drawdown_pct <= 3 %}positive{% else %}negative{% endif %}">
+                        {{ daily_drawdown_pct|floatformat:2 }}%
+                    </div>
+                    <div class="stat-change" style="color:var(--text-muted);">
+                        Limit: {{ risk_config.max_daily_drawdown_pct }}%
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Open Positions</div>
+                    <div class="stat-value neutral">{{ open_positions }}</div>
+                    <div class="stat-change" style="color:var(--text-muted);">
+                        Limit: {{ risk_config.max_open_positions }}
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trades Today</div>
+                    <div class="stat-value neutral">{{ trades_today_count }}</div>
+                    <div class="stat-change" style="color:var(--text-muted);">
+                        Limit: {{ risk_config.max_daily_trades }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Risk Decisions -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Recent Risk Decisions</span>
+            </div>
+            <div class="activity-feed">
+                {% for decision in risk_decisions %}
+                <div class="activity-item">
+                    <span class="activity-time">{{ decision.created_at|date:"H:i" }}</span>
+                    {% if decision.risk_approved %}
+                    <span class="badge badge-green">APPROVED</span>
+                    {% else %}
+                    <span class="badge badge-red">REJECTED</span>
+                    {% endif %}
+                    <span>
+                        {{ decision.side|upper }} {{ decision.quantity }} <strong>{{ decision.symbol }}</strong>
+                        — {{ decision.risk_reason }}
+                    </span>
+                </div>
+                {% empty %}
+                <div class="empty-state">
+                    <p>No risk decisions yet.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
