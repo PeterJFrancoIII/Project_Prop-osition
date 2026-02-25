@@ -63,6 +63,11 @@ class DashboardPageTests(TestCase):
         self.assertIn("labels", data)
         self.assertIn("data", data)
 
+    def test_prop_firms_page(self):
+        response = self.client.get(reverse("dashboard:prop-firms"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Prop Firm")
+
 
 class HTMXPartialTests(TestCase):
     """HTMX partial endpoints return HTML fragments, not full pages."""
