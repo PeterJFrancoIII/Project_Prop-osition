@@ -109,10 +109,11 @@ class PropFirmAccount(models.Model):
             return Decimal("0.00")
             
         trades = Trade.objects.filter(broker_account_id=self.broker_account_id, status="filled")
-        total = Decimal("0.00")
+        total: Decimal = Decimal("0.00")
         for t in trades:
             if t.realized_pnl is not None:
-                total += Decimal(str(t.realized_pnl))
+                pnl: Decimal = Decimal(str(t.realized_pnl))
+                total += pnl
         return total
 
     @property
@@ -173,3 +174,44 @@ class PropFirmAccount(models.Model):
             return (False, f"Total drawdown {self.total_drawdown_pct:.2f}% exceeds limit {self.max_total_drawdown_pct}%")
 
         return (True, "Account in compliance")
+
+
+class PropFirmPayout(models.Model):
+    """
+    Logs incoming payouts/withdrawals from a funded prop firm account.
+    Reconciles the platform's internal P&L with actual bank deposits.
+    """
+    STATUS_CHOICES = [
+        ("pending", "Pending Withdrawal"),
+        ("approved", "Firm Approved"),
+        ("deposited", "Deposited to Bank"),
+        ("rejected", "Rejected / Denied"),
+    ]
+
+    account = models.ForeignKey(
+        PropFirmAccount, on_delete=models.CASCADE, related_name="payouts"
+    )
+    request_date = models.DateField(auto_now_add=True)
+    amount_requested = models.DecimalField(
+        max_digits=15, decimal_places=2, help_text="Amount requested from the firm"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    
+    amount_deposited = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True,
+        help_text="Actual amount that hit the bank (after split and crypto fees)"
+    )
+    deposit_date = models.DateField(null=True, blank=True)
+    
+    notes = models.TextField(blank=True, help_text="e.g. Deel, crypto wallet tx hash")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-request_date"]
+        verbose_name = "Prop Firm Payout"
+        verbose_name_plural = "Prop Firm Payouts"
+
+    def __str__(self):
+        return f"{self.account.name} | ${self.amount_requested} | {self.get_status_display()}"

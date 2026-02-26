@@ -13,7 +13,7 @@ from django.db.models import Sum, F
 
 from apps.execution_engine.models import Trade
 from apps.risk_management.risk_checker import check_trade
-from apps.broker_connector.alpaca_client import AlpacaClient
+from apps.broker_connector.ib_routing import IBRoutingBroker
 from apps.dashboard.models import Strategy
 from apps.risk_management.prop_firm_models import PropFirmAccount
 
@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
 
 def execute_signal(signal: dict) -> list[Trade]:
     """
-    Execute a validated trade signal across all authorized accounts (copy trading).
+    Execute a validated trade signal via Block Trading (Order Batching).
 
-    Pipeline: signal → lookup strategy accounts → (for each account) → risk check → broker order → trade record.
+    Pipeline:
+      1. Lookup prop accounts attached to the strategy.
+      2. Run Risk checks for each account.
+      3. Sum the allocated portions for approved accounts to form ONE massive block order.
+      4. Submit the single Block Order to the Master Broker API.
+      5. Create perfectly synchronized Trade records for each approved account using the master fill price.
 
     Args:
         signal: Validated signal dict.
@@ -45,128 +50,131 @@ def execute_signal(signal: dict) -> list[Trade]:
             ))
         
     if not accounts:
-        # Fallback to no-account (default Alpaca)
+        # Fallback to no-account (default Alpaca Master)
         accounts = [None]
         
-    trades = []
-    for account in accounts:
-        trade = _execute_single_trade(signal, account)
-        trades.append(trade)
-        
-    return trades
-
-
-def _execute_single_trade(signal: dict, account) -> Trade:
-    """
-    Execute a trade for a single specific account.
-    """
-    # --- Step 1: Create pending trade record ---
-    trade = Trade.objects.create(
-        symbol=signal["ticker"],
-        side=signal["action"],
-        quantity=Decimal(str(signal["quantity"])),
-        requested_price=Decimal(str(signal.get("price", "0"))) or None,
-        strategy=signal["strategy"],
-        status="pending",
-        broker_account_id=account.account_number if account else "",
-    )
-    logger.info("Trade %s created: %s %s %s (Acct: %s)", trade.trade_id, trade.side, trade.quantity, trade.symbol, trade.broker_account_id)
-
-    # --- Step 2: Risk check ---
-    approved, reason = check_trade(signal, account=account)
-    trade.risk_approved = approved
-    trade.risk_reason = reason
-
-    if not approved:
-        trade.status = "rejected"
-        trade.error_message = f"Risk check failed: {reason}"
-        trade.save()
-        logger.warning("Trade %s rejected by risk check: %s", trade.trade_id, reason)
-        
-        from apps.execution_engine.notifications import DiscordNotifier
-        DiscordNotifier().send_system_alert(
-            title=f"Trade Rejected: {trade.symbol}",
-            message=f"Risk check failed: {reason}",
-            level="WARNING"
-        )
-        return trade
-
-    # --- Step 3: Submit to broker ---
-    import time
+    approved_accounts = []
+    rejected_trades = []
     
+    # 1. Run local Risk checks for all accounts individually
+    for account in accounts:
+        approved, reason = check_trade(signal, account=account)
+        if not approved:
+            # Create a rejected trade stub for the ledger
+            t = Trade.objects.create(
+                symbol=signal["ticker"],
+                side=signal["action"],
+                quantity=Decimal("0"),
+                strategy=strategy_name,
+                status="rejected",
+                error_message=reason,
+                broker_account_id=account.account_number if account else "",
+                risk_approved=False,
+                risk_reason=reason
+            )
+            rejected_trades.append(t)
+            logger.warning("Trade rejected for %s: %s", t.broker_account_id, reason)
+        else:
+            approved_accounts.append(account)
+            
+    if not approved_accounts:
+        logger.warning(f"Block Trade aborted for {strategy_name}: All accounts failed risk check.")
+        return rejected_trades
+
+    # 2. Calculate the block size
+    # By default, the Strategy Runner calculates an aggregated baseline `qty` based on the master 
+    # portfolio allocator. We apply that master quantity to the total block order.
+    total_quantity = Decimal(str(signal["quantity"]))
+    
+    # 3. Submit Master Block Order to the Broker
     # Smart slippage control: prevent massive bad fills
     order_type = "market"
     limit_price = None
+    intended_price = float(signal.get("price") or 0)
     
-    if signal.get("price") and float(signal["price"]) > 0:
-        intended_price = float(signal["price"])
+    if intended_price > 0:
         if signal["action"] == "buy":
-            # 1% slippage max on entry
             order_type = "limit"
-            limit_price = round(intended_price * 1.01, 2)
+            limit_price = float(Decimal(str(intended_price)) * Decimal("1.01"))
         elif signal["action"] == "sell":
             if "panic" in signal.get("reason", "").lower() or "stop" in signal.get("reason", "").lower():
-                # Market plunge -> get out instantly
                 order_type = "market"
             else:
-                # Normal take profit -> limit 1% below
                 order_type = "limit"
-                limit_price = round(intended_price * 0.99, 2)
+                limit_price = float(Decimal(str(intended_price)) * Decimal("0.99"))
 
-    max_retries = 3
-    retry_delay = 1.0
+    master_fill_price = None
+    master_broker_id = ""
+    status = "pending"
+    error_message = ""
     
-    for attempt in range(max_retries):
-        try:
-            client = AlpacaClient()
-            order_result = client.submit_order(
-                symbol=signal["ticker"],
-                qty=float(signal["quantity"]),
-                side=signal["action"],
-                order_type=order_type,
-                time_in_force="day",
-                limit_price=limit_price,
-            )
-
-            trade.broker_order_id = order_result.get("order_id", "")
-            trade.status = "submitted"
-            if order_result.get("filled_avg_price"):
-                trade.fill_price = Decimal(str(order_result["filled_avg_price"]))
-                trade.status = "filled"
-
-            # --- Step 4: Cost basis and P&L tracking ---
-            if trade.status == "filled" and trade.fill_price:
-                _update_cost_basis(trade)
-
-            trade.save()
-            logger.info("Trade %s submitted → broker order %s", trade.trade_id, trade.broker_order_id)
+    try:
+        # Use IB Gateway logic to submit the massive block trade
+        client = IBRoutingBroker()
+        order_result = client.submit_block_order(
+            strategy_name=strategy_name or "UNKNOWN",
+            symbol=signal["ticker"],
+            qty=float(total_quantity),
+            side=signal["action"],
+            order_type=order_type,
+            time_in_force="day",
+            limit_price=limit_price,
+            stop_price=None  # Can add stop price logic if needed
+        )
+        
+        master_broker_id = order_result.get("order_id", "")
+        status = "submitted"
+        if order_result.get("filled_avg_price"):
+            master_fill_price = Decimal(str(order_result["filled_avg_price"]))
+            status = "filled"
             
-            from apps.execution_engine.notifications import DiscordNotifier
-            if trade.status == "filled" or getattr(trade, "simulated", False):
-                DiscordNotifier().send_trade_alert(trade)
-                
-            break  # Success, exit retry loop
+    except Exception as e:
+        status = "error"
+        error_message = str(e)
+        logger.error(f"Master Block Trade Failed: {e}", exc_info=True)
 
-        except Exception as e:
-            if attempt < max_retries - 1:
-                logger.warning("API timeout/error on attempt %d: %s. Retrying in %s sec...", attempt + 1, e, retry_delay)
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                trade.status = "error"
-                trade.error_message = str(e)
-                trade.save()
-                logger.error("Trade %s failed after %d retries: %s", trade.trade_id, max_retries, e, exc_info=True)
-                
-                from apps.execution_engine.notifications import DiscordNotifier
-                DiscordNotifier().send_system_alert(
-                    title=f"Execution Error: {trade.symbol}",
-                    message=f"Failed after {max_retries} attempts. Error: {str(e)}",
-                    level="ERROR"
-                )
-                raise
-
-    return trade
+    # 4. Distribute the Master Trade into localized Account ledgers
+    final_trades = rejected_trades
+    
+    # Prorate the total quantity across approved accounts based on equity weightings
+    total_approved_equity: Decimal = Decimal("0")
+    for a in approved_accounts:
+        if isinstance(a, PropFirmAccount):
+            total_approved_equity += Decimal(str(a.current_equity))
+            
+    if total_approved_equity <= Decimal("0"):
+        total_approved_equity = Decimal("100")
+    
+    for account in approved_accounts:
+        # Determine fractional quantity for this account
+        if not isinstance(account, PropFirmAccount):
+            acct_qty = total_quantity
+        else:
+            weight = Decimal(str(account.current_equity)) / total_approved_equity
+            acct_qty = total_quantity * weight
+            
+        trade = Trade.objects.create(
+            symbol=signal["ticker"],
+            side=signal["action"],
+            quantity=acct_qty,
+            requested_price=Decimal(str(intended_price)) if intended_price else None,
+            strategy=strategy_name,
+            status=status,
+            broker_account_id=account.account_number if account else "",
+            broker_order_id=master_broker_id,
+            error_message=error_message,
+            risk_approved=True,
+            risk_reason="Passed Block Check"
+        )
+        
+        if status == "filled" and master_fill_price:
+            trade.fill_price = master_fill_price
+            _update_cost_basis(trade)
+            trade.save()
+            
+        final_trades.append(trade)
+        
+    return final_trades
 
 
 def _update_cost_basis(trade: Trade):
@@ -215,17 +223,19 @@ def _get_average_cost_basis(symbol: str) -> Decimal | None:
         symbol=symbol, side="buy", status="filled"
     )
 
-    total_cost = Decimal("0")
-    total_qty = Decimal("0")
+    total_cost: Decimal = Decimal("0")
+    total_qty: Decimal = Decimal("0")
 
     for b in buys:
         if b.cost_basis is not None and Decimal(str(b.cost_basis)) > 0:
             qty = Decimal(str(b.quantity))
             cb = Decimal(str(b.cost_basis))
-            total_cost += cb * qty
+            cost_add: Decimal = cb * qty
+            total_cost += cost_add
             total_qty += qty
 
     if total_qty > Decimal("0"):
-        return total_cost / total_qty
+        result: Decimal = total_cost / total_qty
+        return result
 
     return None

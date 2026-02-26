@@ -76,6 +76,7 @@ class AlpacaClient:
         time_in_force: str = "day",
         limit_price: float = None,
         stop_price: float = None,
+        client_order_id: str = None,
     ) -> dict:
         """
         Submit an order to Alpaca.
@@ -99,6 +100,8 @@ class AlpacaClient:
             "type": order_type,
             "time_in_force": time_in_force,
         }
+        if client_order_id:
+            order_params["client_order_id"] = client_order_id
         if limit_price is not None:
             order_params["limit_price"] = limit_price
         if stop_price is not None:
