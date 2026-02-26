@@ -73,7 +73,7 @@ class Command(BaseCommand):
         
         best_cagr = -999.0
         best_config = None
-        best_results = None
+        best_results = {}
 
         # 3. Import simulation from the backtester dynamically to reuse the engine
         from apps.market_data.management.commands.backtest import Command as BacktestCommand

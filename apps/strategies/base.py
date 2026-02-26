@@ -90,7 +90,7 @@ class BaseStrategy(ABC):
     timeframe: str = "1d"
     description: str = ""
 
-    def __init__(self, config: dict = None):
+    def __init__(self, config: Optional[dict] = None):
         """
         Initialize with optional config dict.
 
@@ -112,7 +112,7 @@ class BaseStrategy(ABC):
         Returns:
             Signal object (BUY, SELL, or HOLD).
         """
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def calculate_position_size(
@@ -129,7 +129,7 @@ class BaseStrategy(ABC):
         Returns:
             Number of shares (Decimal).
         """
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     def check_exit(
@@ -147,9 +147,9 @@ class BaseStrategy(ABC):
         Returns:
             Signal.SELL if should exit, Signal.HOLD if should keep.
         """
-        pass
+        raise NotImplementedError()
 
-    def get_bars(self, ticker: str, timeframe: str = None, limit: int = 100) -> list:
+    def get_bars(self, ticker: str, timeframe: Optional[str] = None, limit: int = 100) -> list:
         """
         Fetch OHLCV bars from the database.
 
