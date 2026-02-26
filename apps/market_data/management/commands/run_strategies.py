@@ -105,6 +105,9 @@ class Command(BaseCommand):
                     continue
 
                 signal = strategy.generate_signal(ticker, bars)
+                signal = strategy.apply_ai_filters(signal)
+                signal = strategy.apply_fundamental_filters(signal)
+                signal = strategy.apply_regime_filters(signal)
 
                 if signal.is_actionable:
                     # Calculate position size

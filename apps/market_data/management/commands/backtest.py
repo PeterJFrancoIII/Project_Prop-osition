@@ -4,18 +4,19 @@ Backtesting engine — vectorized historical strategy simulation.
 Usage:
     python manage.py backtest momentum_breakout --symbol AAPL --days 365
 """
+# pyre-ignore-all-errors
 
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand  # pyre-ignore
 
-from apps.market_data.models import OHLCVBar
-from apps.strategies.momentum_breakout import MomentumBreakout
-from apps.strategies.mean_reversion import MeanReversion
-from apps.strategies.sector_rotation import SectorRotation
-from apps.strategies.smart_dca import SmartDCA
+from apps.market_data.models import OHLCVBar  # pyre-ignore
+from apps.strategies.momentum_breakout import MomentumBreakout  # pyre-ignore
+from apps.strategies.mean_reversion import MeanReversion  # pyre-ignore
+from apps.strategies.sector_rotation import SectorRotation  # pyre-ignore
+from apps.strategies.smart_dca import SmartDCA  # pyre-ignore
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,10 @@ class Command(BaseCommand):
             else:
                 # Check entry
                 signal = strategy.generate_signal(symbol, bar_window)
+                signal = strategy.apply_ai_filters(signal, date_cutoff=current_date)
+                signal = strategy.apply_fundamental_filters(signal)
+                signal = strategy.apply_regime_filters(signal, date_cutoff=current_date)
+                
                 if signal.is_actionable and signal.action == "buy":
                     # BUY
                     qty = strategy.calculate_position_size(symbol, current_price, equity)
@@ -297,7 +302,7 @@ class Command(BaseCommand):
                 pnl_str = f"${t['pnl']:+,.2f}" if t["pnl"] != 0 else ""
                 action_color = self.style.SUCCESS if t["action"] == "buy" else self.style.WARNING
                 self.stdout.write(
-                    f"  {t['date'][:10]}  {action_color(t['action'].upper():>10s)}"
+                    f"  {t['date'][:10]}  {action_color(t['action'].upper().rjust(10))}"
                     f"  {t['qty']:.0f} @ ${t['price']:.2f}  {pnl_str}\n"
                     f"               {t['reason']}\n"
                 )

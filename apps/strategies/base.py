@@ -37,6 +37,7 @@ class Signal:
         confidence: float = 0.0,
         reason: str = "",
         strategy_name: str = "",
+        sentiment_score: Optional[float] = None,
     ):
         self.action = action
         self.ticker = ticker
@@ -45,6 +46,7 @@ class Signal:
         self.confidence = confidence
         self.reason = reason
         self.strategy_name = strategy_name
+        self.sentiment_score = sentiment_score
         self.timestamp = datetime.now()
 
     @property
@@ -62,6 +64,7 @@ class Signal:
             "strategy": self.strategy_name,
             "confidence": self.confidence,
             "reason": self.reason,
+            "sentiment_score": self.sentiment_score,
             "timestamp": self.timestamp.isoformat(),
         }
 
@@ -168,6 +171,148 @@ class BaseStrategy(ABC):
             }
             for bar in reversed(bars)  # Oldest first
         ]
+
+    def get_market_sentiment(self, ticker: str, date_cutoff: Optional[datetime] = None, days_back: int = 7) -> dict:
+        """
+        Calculates aggregate sentiment for a ticker (or general market) over the last X days.
+        Returns {"score": float, "count": int}.
+        """
+        try:
+            from django.utils import timezone
+            from datetime import timedelta
+            from apps.market_data.models import NewsArticle
+            
+            cutoff = date_cutoff or timezone.now()
+            start_time = cutoff - timedelta(days=days_back)
+            
+            # Fetch general market news or specific ticker news
+            articles = NewsArticle.objects.filter(
+                published_at__gte=start_time,
+                published_at__lte=cutoff
+            )
+            
+            # If we want to be strict about ticker:
+            # articles = articles.filter(symbol=ticker)
+            
+            if not articles.exists():
+                return {"score": 0.0, "count": 0}
+                
+            total_score = sum(float(a.sentiment_score) for a in articles)
+            return {
+                "score": total_score / articles.count(),
+                "count": articles.count()
+            }
+        except Exception as e:
+            logger.error(f"Error fetching sentiment: {e}")
+            return {"score": 0.0, "count": 0}
+
+    def apply_ai_filters(self, signal: Signal, date_cutoff: Optional[datetime] = None) -> Signal:
+        """
+        Adjusts or blocks a signal based on AI market sentiment.
+        """
+        if not signal.is_actionable:
+            return signal
+            
+        # Optional kill-switch via config
+        if not self.config.get("use_ai_sentiment", True):
+            return signal
+            
+        sentiment_data = self.get_market_sentiment(signal.ticker, date_cutoff)
+        score = sentiment_data["score"]
+        
+        signal.sentiment_score = score
+        sentiment_str = f" | AI Sentiment: {score:+.2f} ({sentiment_data['count']} articles)"
+        signal.reason += sentiment_str
+        
+        # Bear market filter: Block BUYs during extreme negative news cycles
+        if score < -0.2 and signal.action == Signal.BUY:
+            signal.reason += " -> BLOCKED by Negative AI Sentiment"
+            signal.action = Signal.HOLD
+            
+        return signal
+
+    def apply_fundamental_filters(self, signal: Signal) -> Signal:
+        """
+        Adjusts or blocks a signal based on fundamental data (valuation, earnings, analyst consensus).
+        """
+        if not signal.is_actionable or not self.config.get("use_fundamentals", True):
+            return signal
+            
+        try:
+            from apps.ai_brain.fundamentals import FundamentalAnalyzer
+            analyzer = FundamentalAnalyzer()
+            
+            # Analyst consensus check
+            consensus = analyzer.get_analyst_consensus(signal.ticker)
+            score = consensus.get("score", 3.0)
+            
+            # Score is 1 (Strong Buy) to 5 (Sell). We block Buys if the score is > 3.0 (worse than Hold)
+            if score > 3.0 and signal.action == Signal.BUY:
+                signal.reason += f" -> BLOCKED by Analyst Consensus ({score:.1f})"
+                signal.action = Signal.HOLD
+                return signal
+                
+            # Valuation check
+            val = analyzer.get_valuation_metrics(signal.ticker)
+            fwd_pe = val.get("forward_pe", 0.0)
+            
+            if fwd_pe > 50.0 and signal.action == Signal.BUY:
+                 # Very expensive valuation - warn but maybe don't strictly block unless configured
+                 signal.reason += f" | NOTE: High Fwd P/E ({fwd_pe:.1f})"
+                 
+            # Earnings drift check
+            earnings = analyzer.get_earnings_surprise(signal.ticker)
+            drift = earnings.get("drift_signal", "neutral")
+            
+            if drift == "bearish" and signal.action == Signal.BUY:
+                signal.reason += " -> BLOCKED by Negative Earnings Surprise"
+                signal.action = Signal.HOLD
+                return signal
+                
+        except Exception as e:
+            logger.error(f"Error applying fundamental filters for {signal.ticker}: {e}")
+            
+        return signal
+
+    def apply_regime_filters(self, signal: Signal, date_cutoff: Optional[datetime] = None) -> Signal:
+        """
+        Adjusts or blocks a signal based on broad market regime (SPY trend, volatility, crashes).
+        """
+        if not signal.is_actionable or not self.config.get("use_regime_filters", True):
+            return signal
+            
+        try:
+            from apps.ai_brain.regime import RegimeDetector
+            detector = RegimeDetector()
+            regime = detector.get_market_regime(date_cutoff, lookback_days=60)
+            
+            trend = regime.get("trend", "unknown")
+            is_crash = regime.get("is_crash_mode", False)
+            vol = regime.get("volatility", "neutral")
+            
+            # 1. Crash Protection: Block all BUYs if SPY is crashing
+            if is_crash and signal.action == Signal.BUY:
+                signal.reason += " -> BLOCKED by Market Crash Regime"
+                signal.action = Signal.HOLD
+                return signal
+                
+            # 2. Trend Alignment: If SPY is bearish, be very careful with momentum buys
+            if trend == "bearish" and signal.action == Signal.BUY:
+                # Option: Strict mode blocks all Buys in bear market.
+                # For now, we will add a warning note, or we can optionally block.
+                # Let's block it from Mean Reversion and Momentum since they fight the tape
+                if getattr(self, "name", "").lower() in ["momentum breakout", "mean reversion"]:
+                     if self.config.get("strict_trend_alignment", False):
+                         signal.reason += f" -> BLOCKED by Bearish Market Trend ({trend})"
+                         signal.action = Signal.HOLD
+                         return signal
+                     else:
+                         signal.reason += f" | NOTE: Fighting Bearish Trend"
+                         
+        except Exception as e:
+            logger.error(f"Error applying regime filters for {signal.ticker}: {e}")
+            
+        return signal
 
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.name}' v{self.version}>"
