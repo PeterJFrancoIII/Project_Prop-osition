@@ -174,7 +174,7 @@ class BaseStrategy(ABC):
 
     def get_market_sentiment(self, ticker: str, date_cutoff: Optional[datetime] = None, days_back: int = 7) -> dict:
         """
-        Calculates aggregate sentiment for a ticker (or general market) over the last X days.
+        Calculates aggregate sentiment for a ticker (or general market) over the last X days based on News.
         Returns {"score": float, "count": int}.
         """
         try:
@@ -191,9 +191,6 @@ class BaseStrategy(ABC):
                 published_at__lte=cutoff
             )
             
-            # If we want to be strict about ticker:
-            # articles = articles.filter(symbol=ticker)
-            
             if not articles.exists():
                 return {"score": 0.0, "count": 0}
                 
@@ -203,12 +200,40 @@ class BaseStrategy(ABC):
                 "count": articles.count()
             }
         except Exception as e:
-            logger.error(f"Error fetching sentiment: {e}")
+            logger.error(f"Error fetching news sentiment: {e}")
+            return {"score": 0.0, "count": 0}
+
+    def get_social_sentiment(self, ticker: str) -> dict:
+        """
+        Calculates aggregate retail sentiment for a ticker using SocialScraper.
+        """
+        try:
+            from apps.ai_brain.social_scraper import SocialScraper
+            from apps.ai_brain.sentiment import SentimentAnalyzer
+            
+            scraper = SocialScraper()
+            analyzer = SentimentAnalyzer()
+            
+            texts = scraper.get_aggregate_social_texts(ticker)
+            if not texts:
+                return {"score": 0.0, "count": 0}
+                
+            total_score = 0.0
+            for text in texts:
+                result = analyzer.analyze(text)
+                total_score += result["score"]
+                
+            return {
+                "score": total_score / len(texts),
+                "count": len(texts)
+            }
+        except Exception as e:
+            logger.error(f"Error fetching social sentiment: {e}")
             return {"score": 0.0, "count": 0}
 
     def apply_ai_filters(self, signal: Signal, date_cutoff: Optional[datetime] = None) -> Signal:
         """
-        Adjusts or blocks a signal based on AI market sentiment.
+        Adjusts or blocks a signal based on AI market sentiment (News + Social).
         """
         if not signal.is_actionable:
             return signal
@@ -220,11 +245,22 @@ class BaseStrategy(ABC):
         sentiment_data = self.get_market_sentiment(signal.ticker, date_cutoff)
         score = sentiment_data["score"]
         
+        # Merge social sentiment if not running historical backtest
+        if not date_cutoff and self.config.get("use_social_sentiment", True):
+            social_data = self.get_social_sentiment(signal.ticker)
+            if social_data["count"] > 0:
+                # Weighted average: 60% news, 40% retail social
+                score = (score * 0.6) + (social_data["score"] * 0.4)
+                sentiment_str = f" | AI Sentiment: {score:+.2f} ({sentiment_data['count']} news, {social_data['count']} social)"
+            else:
+                sentiment_str = f" | AI Sentiment: {score:+.2f} ({sentiment_data['count']} news)"
+        else:
+            sentiment_str = f" | AI Sentiment: {score:+.2f} ({sentiment_data['count']} articles)"
+        
         signal.sentiment_score = score
-        sentiment_str = f" | AI Sentiment: {score:+.2f} ({sentiment_data['count']} articles)"
         signal.reason += sentiment_str
         
-        # Bear market filter: Block BUYs during extreme negative news cycles
+        # Bear market / Panic filter: Block BUYs during extreme negative news/social cycles
         if score < -0.2 and signal.action == Signal.BUY:
             signal.reason += " -> BLOCKED by Negative AI Sentiment"
             signal.action = Signal.HOLD
