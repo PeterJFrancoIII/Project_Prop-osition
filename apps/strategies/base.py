@@ -314,5 +314,47 @@ class BaseStrategy(ABC):
             
         return signal
 
+    def apply_kelly_sizing(self, signal: Signal, account_equity: Decimal, local_pnl_history: list[float] | None = None) -> Signal:
+        """
+        Calculates optimal position size using the Kelly Criterion based on strategy edge.
+        If the strategy has a negative mathematical edge, trades can be scaled down to 0 (cash mode).
+        Overrides signal.quantity.
+        """
+        use_kelly = self.config.get("use_kelly_sizing", False)
+        if not use_kelly or not signal.is_actionable or not self.name:
+            return signal
+            
+        try:
+            from apps.risk_management.kelly_criterion import KellyCriterionEngine
+            mode = self.config.get("kelly_mode", "half")
+            engine = KellyCriterionEngine(mode=mode)
+            
+            perf = engine.get_historical_performance(self.name, local_pnl_history)
+            if perf:
+                win_rate, avg_win, avg_loss = perf
+                kelly_fraction = engine.calculate_fraction(win_rate, avg_win, avg_loss)
+                
+                if kelly_fraction > 0:
+                    stop_loss_pct = Decimal(str(self.config.get("stop_loss_pct", 2.0)))
+                    stop_distance = signal.price * stop_loss_pct / Decimal("100")
+                    
+                    if stop_distance > 0:
+                        risk_amount = account_equity * Decimal(str(kelly_fraction))
+                        shares = risk_amount / stop_distance
+                        signal.quantity = max(Decimal("1"), shares.quantize(Decimal("1")))
+                        signal.reason += f" | Kelly ({mode}): {kelly_fraction:.2%} risk = {signal.quantity} sh"
+                else:
+                    # Negative edge or zero Kelly -> Sit in cash
+                    signal.quantity = Decimal("0")
+                    signal.action = Signal.HOLD
+                    signal.reason += " -> BLOCKED by Kelly Criterion (Negative Expected Value)"
+            else:
+                 signal.reason += " | Kelly Skipped (< 10 historical trades)"
+                 
+        except Exception as e:
+            logger.error(f"Error applying Kelly sizing for {signal.ticker}: {e}")
+            
+        return signal
+
     def __repr__(self):
         return f"<{self.__class__.__name__} '{self.name}' v{self.version}>"

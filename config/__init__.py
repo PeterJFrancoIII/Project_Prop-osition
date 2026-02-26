@@ -26,3 +26,8 @@ def custom_get_db_prep_value(self, value, connection, prepared=False):
 DecimalField.to_python = custom_to_python
 DecimalField.from_db_value = custom_from_db_value
 DecimalField.get_db_prep_value = custom_get_db_prep_value
+
+# Import Celery app on startup
+from .celery import app as celery_app
+
+__all__ = ('celery_app',)

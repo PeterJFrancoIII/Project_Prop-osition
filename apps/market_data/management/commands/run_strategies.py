@@ -124,6 +124,11 @@ class Command(BaseCommand):
                         ticker, signal.price, equity
                     )
                     signal.quantity = qty
+                    signal = strategy.apply_kelly_sizing(signal, equity)
+                    qty = signal.quantity
+
+                    if qty <= 0:
+                        continue # Blocked by Kelly (Negative Edge / Zero Risk)
 
                     if dry_run:
                         self.stdout.write(

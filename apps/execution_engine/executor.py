@@ -82,6 +82,13 @@ def _execute_single_trade(signal: dict, account) -> Trade:
         trade.error_message = f"Risk check failed: {reason}"
         trade.save()
         logger.warning("Trade %s rejected by risk check: %s", trade.trade_id, reason)
+        
+        from apps.execution_engine.notifications import DiscordNotifier
+        DiscordNotifier().send_system_alert(
+            title=f"Trade Rejected: {trade.symbol}",
+            message=f"Risk check failed: {reason}",
+            level="WARNING"
+        )
         return trade
 
     # --- Step 3: Submit to broker ---
@@ -107,12 +114,23 @@ def _execute_single_trade(signal: dict, account) -> Trade:
 
         trade.save()
         logger.info("Trade %s submitted → broker order %s", trade.trade_id, trade.broker_order_id)
+        
+        from apps.execution_engine.notifications import DiscordNotifier
+        if trade.status == "filled" or getattr(trade, "simulated", False):
+            DiscordNotifier().send_trade_alert(trade)
 
     except Exception as e:
         trade.status = "error"
         trade.error_message = str(e)
         trade.save()
         logger.error("Trade %s failed: %s", trade.trade_id, e, exc_info=True)
+        
+        from apps.execution_engine.notifications import DiscordNotifier
+        DiscordNotifier().send_system_alert(
+            title=f"Execution Error: {trade.symbol}",
+            message=str(e),
+            level="ERROR"
+        )
         raise
 
     return trade

@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "corsheaders",
+    "django_celery_beat",
     # Project apps
     "apps.webhooks",
     "apps.broker_connector",
@@ -36,6 +37,7 @@ INSTALLED_APPS = [
     "apps.risk_management",
     "apps.market_data",
     "apps.dashboard",
+    "apps.ai_brain",
 ]
 
 MIDDLEWARE = [
@@ -146,9 +148,11 @@ CHANNEL_LAYERS = {
 # Celery
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_CACHE_BACKEND = "default"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
 
 # Alpaca Broker
 BROKER_ALPACA_API_KEY = os.environ.get("BROKER_ALPACA_API_KEY", "")

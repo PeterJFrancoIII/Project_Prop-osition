@@ -176,6 +176,16 @@ class Command(BaseCommand):
                 if signal.is_actionable and signal.action == "buy":
                     # BUY
                     qty = strategy.calculate_position_size(symbol, current_price, equity)
+                    signal.quantity = qty
+                    
+                    # Apply Kelly Dynamic Sizing
+                    local_pnl = [t["pnl"] for t in trades if "sell" in t["action"]]
+                    signal = strategy.apply_kelly_sizing(signal, equity, local_pnl_history=local_pnl)
+                    qty = signal.quantity
+                    
+                    if qty <= 0:
+                        continue # Blocked by Kelly (Negative Edge / Zero Risk)
+                        
                     cost = current_price * qty
                     if cost <= equity:
                         equity -= cost
