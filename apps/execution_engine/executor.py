@@ -92,46 +92,79 @@ def _execute_single_trade(signal: dict, account) -> Trade:
         return trade
 
     # --- Step 3: Submit to broker ---
-    try:
-        client = AlpacaClient()
-        order_result = client.submit_order(
-            symbol=signal["ticker"],
-            qty=float(signal["quantity"]),
-            side=signal["action"],
-            order_type="market",
-            time_in_force="day",
-        )
+    import time
+    
+    # Smart slippage control: prevent massive bad fills
+    order_type = "market"
+    limit_price = None
+    
+    if signal.get("price") and float(signal["price"]) > 0:
+        intended_price = float(signal["price"])
+        if signal["action"] == "buy":
+            # 1% slippage max on entry
+            order_type = "limit"
+            limit_price = round(intended_price * 1.01, 2)
+        elif signal["action"] == "sell":
+            if "panic" in signal.get("reason", "").lower() or "stop" in signal.get("reason", "").lower():
+                # Market plunge -> get out instantly
+                order_type = "market"
+            else:
+                # Normal take profit -> limit 1% below
+                order_type = "limit"
+                limit_price = round(intended_price * 0.99, 2)
 
-        trade.broker_order_id = order_result.get("order_id", "")
-        trade.status = "submitted"
-        if order_result.get("filled_avg_price"):
-            trade.fill_price = Decimal(str(order_result["filled_avg_price"]))
-            trade.status = "filled"
+    max_retries = 3
+    retry_delay = 1.0
+    
+    for attempt in range(max_retries):
+        try:
+            client = AlpacaClient()
+            order_result = client.submit_order(
+                symbol=signal["ticker"],
+                qty=float(signal["quantity"]),
+                side=signal["action"],
+                order_type=order_type,
+                time_in_force="day",
+                limit_price=limit_price,
+            )
 
-        # --- Step 4: Cost basis and P&L tracking ---
-        if trade.status == "filled" and trade.fill_price:
-            _update_cost_basis(trade)
+            trade.broker_order_id = order_result.get("order_id", "")
+            trade.status = "submitted"
+            if order_result.get("filled_avg_price"):
+                trade.fill_price = Decimal(str(order_result["filled_avg_price"]))
+                trade.status = "filled"
 
-        trade.save()
-        logger.info("Trade %s submitted → broker order %s", trade.trade_id, trade.broker_order_id)
-        
-        from apps.execution_engine.notifications import DiscordNotifier
-        if trade.status == "filled" or getattr(trade, "simulated", False):
-            DiscordNotifier().send_trade_alert(trade)
+            # --- Step 4: Cost basis and P&L tracking ---
+            if trade.status == "filled" and trade.fill_price:
+                _update_cost_basis(trade)
 
-    except Exception as e:
-        trade.status = "error"
-        trade.error_message = str(e)
-        trade.save()
-        logger.error("Trade %s failed: %s", trade.trade_id, e, exc_info=True)
-        
-        from apps.execution_engine.notifications import DiscordNotifier
-        DiscordNotifier().send_system_alert(
-            title=f"Execution Error: {trade.symbol}",
-            message=str(e),
-            level="ERROR"
-        )
-        raise
+            trade.save()
+            logger.info("Trade %s submitted → broker order %s", trade.trade_id, trade.broker_order_id)
+            
+            from apps.execution_engine.notifications import DiscordNotifier
+            if trade.status == "filled" or getattr(trade, "simulated", False):
+                DiscordNotifier().send_trade_alert(trade)
+                
+            break  # Success, exit retry loop
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning("API timeout/error on attempt %d: %s. Retrying in %s sec...", attempt + 1, e, retry_delay)
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                trade.status = "error"
+                trade.error_message = str(e)
+                trade.save()
+                logger.error("Trade %s failed after %d retries: %s", trade.trade_id, max_retries, e, exc_info=True)
+                
+                from apps.execution_engine.notifications import DiscordNotifier
+                DiscordNotifier().send_system_alert(
+                    title=f"Execution Error: {trade.symbol}",
+                    message=f"Failed after {max_retries} attempts. Error: {str(e)}",
+                    level="ERROR"
+                )
+                raise
 
     return trade
 

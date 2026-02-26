@@ -58,12 +58,31 @@ class Command(BaseCommand):
             f"{'='*50}\n"
         )
 
+        # Determine total portfolio equity to allocate
+        total_equity = Decimal("100000")
+        try:
+            from apps.broker_connector.alpaca_client import AlpacaClient
+            client = AlpacaClient()
+            acct = client.get_account()
+            total_equity = Decimal(str(acct["equity"]))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Broker connection failed: {e}. Defaulting to $100k test equity."))
+            
+        from apps.risk_management.portfolio_allocator import PortfolioAllocator
+        allocator = PortfolioAllocator(total_equity)
+        strategy_allocations = allocator.get_strategy_allocations()
+
         for db_strategy in active_strategies:
-            self._run_strategy(db_strategy, dry_run)
+            allocated_base = strategy_allocations.get(db_strategy.name, Decimal("0"))
+            if allocated_base <= 0:
+                self.stdout.write(self.style.WARNING(f"  ⚠️  {db_strategy.name}: $0 capital allocated (Risk Parity skipped)"))
+                continue
+                
+            self._run_strategy(db_strategy, dry_run, allocated_base)
 
         self.stdout.write(self.style.SUCCESS("\n✅ Strategy run complete.\n"))
 
-    def _run_strategy(self, db_strategy: Strategy, dry_run: bool):
+    def _run_strategy(self, db_strategy: Strategy, dry_run: bool, allocated_equity: Decimal):
         """Run a single strategy for all its configured symbols."""
         # Look up strategy class
         # Try matching by strategy name convention, or fall back to custom_params
@@ -111,14 +130,9 @@ class Command(BaseCommand):
 
                 if signal.is_actionable:
                     # Calculate position size
-                    equity = Decimal("100000")  # TODO: get from Alpaca
-                    try:
-                        from apps.broker_connector.alpaca_client import AlpacaClient
-                        client = AlpacaClient()
-                        acct = client.get_account()
-                        equity = Decimal(str(acct["equity"]))
-                    except Exception:
-                        pass
+                    # Use specific allocator-assigned equity slice, not total account equity
+                    # (Preventing massive over-leverage if 5+ strats all fire at once)
+                    equity = allocated_equity
 
                     qty = strategy.calculate_position_size(
                         ticker, signal.price, equity

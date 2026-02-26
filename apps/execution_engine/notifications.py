@@ -69,6 +69,51 @@ class DiscordNotifier:
         
         self._dispatch(embed)
         
+    def send_drawdown_warning(self, account, pct_to_max: float):
+        """
+        Sends an urgent alert when an account is nearing its max drawdown limit.
+        """
+        if not self.is_configured:
+            return
+            
+        embed = {
+            "title": f"⚠️ DRAWDOWN WARNING: {account.name}",
+            "color": 0xFF8C00, # Dark Orange
+            "description": f"Account is {pct_to_max:.1f}% of the way to MAX LOSS.",
+            "fields": [
+                {"name": "Current Equity", "value": f"${account.current_equity:,.2f}", "inline": True},
+                {"name": "Total Drawdown", "value": f"{account.total_drawdown_pct:.2f}%", "inline": True},
+                {"name": "Max Allowed", "value": f"{account.max_total_drawdown_pct:.2f}%", "inline": True},
+            ],
+            "footer": {"text": "Auto-Trader Risk Manager"}
+        }
+        self._dispatch(embed)
+
+    def send_eod_report(self, accounts):
+        """
+        Sends an End-of-Day summary of all active accounts.
+        """
+        if not self.is_configured:
+            return
+            
+        fields = []
+        for acc in accounts:
+            status = "🟢 Pass" if acc.is_passing else "🔴 Fail"
+            fields.append({
+                "name": f"{acc.name} ({status})",
+                "value": f"Equity: ${acc.current_equity:,.2f} | PnL: ${acc.total_pnl:,.2f} | Target: {acc.progress_pct:.1f}%",
+                "inline": False
+            })
+            
+        embed = {
+            "title": "📊 End of Day Portfolio Report",
+            "color": 0x9B59B6, # Purple
+            "description": f"Daily closing summary for {len(accounts)} active accounts.",
+            "fields": fields,
+            "footer": {"text": "Auto-Trader Portfolio Tracker"}
+        }
+        self._dispatch(embed)
+        
     def _dispatch(self, embed: dict):
         if not self.webhook_url:
             return
