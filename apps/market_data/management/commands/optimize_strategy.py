@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import List, Dict
+from typing import List, Dict, Any, Optional, cast
 
 from django.core.management.base import BaseCommand
 from apps.market_data.models import OHLCVBar
@@ -72,8 +72,8 @@ class Command(BaseCommand):
         StrategyCls = STRATEGY_CLASSES[strategy_name]
         
         best_cagr = -999.0
-        best_config = None
-        best_results = {}
+        best_config: Optional[Dict[str, Any]] = None
+        best_results: Dict[str, Any] = {}
 
         # 3. Import simulation from the backtester dynamically to reuse the engine
         from apps.market_data.management.commands.backtest import Command as BacktestCommand
@@ -87,7 +87,8 @@ class Command(BaseCommand):
             # and instantiated directly
             strat_instance = StrategyCls(config)
             
-            results = bt_engine._simulate(strat_instance, symbol, bars, starting_equity)
+            raw_results = bt_engine._simulate(strat_instance, symbol, bars, starting_equity)
+            results = cast(Dict[str, Any], raw_results)
             cagr = results.get("cagr_pct", 0.0)
             
             # Print progress every 10
@@ -105,9 +106,13 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("\n🏆 OPTIMIZATION COMPLETE 🏆"))
         self.stdout.write(f"Best CAGR: {best_cagr:.2f}%")
-        self.stdout.write(f"Win Rate:  {best_results.get('win_rate_pct', 0):.2f}%")
-        self.stdout.write(f"Max DD:    {best_results.get('max_drawdown_pct', 0):.2f}%")
-        self.stdout.write(f"Trades:    {best_results.get('total_trades', 0)}")
+        win_rate = float(best_results.get('win_rate_pct', 0.0))
+        max_dd = float(best_results.get('max_drawdown_pct', 0.0))
+        trades = int(best_results.get('total_trades', 0))
+
+        self.stdout.write(f"Win Rate:  {win_rate:.2f}%")
+        self.stdout.write(f"Max DD:    {max_dd:.2f}%")
+        self.stdout.write(f"Trades:    {trades}")
         self.stdout.write(f"\nOptimal Parameter Configuration:")
         self.stdout.write(json.dumps(best_config, indent=2))
 
